@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KrewsUp Admin Panel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f6fa;
+      min-height: 100vh;
+    }
+
+    .login-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .login-box {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-box h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #1a1a2e;
+    }
+
+    .login-box p {
+      color: #666;
+      margin-bottom: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      color: #333;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #6c5ce7;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #6c5ce7;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5a4bd4;
+    }
+
+    .btn-success {
+      background: #00b894;
+      color: white;
+      padding: 8px 16px;
+      width: auto;
+    }
+
+    .btn-danger {
+      background: #d63031;
+      color: white;
+      padding: 8px 16px;
+      width: auto;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+    .error-msg {
+      color: #d63031;
+      font-size: 14px;
+      margin-top: 12px;
+      text-align: center;
+    }
+
+    /* Dashboard */
+    .dashboard {
+      display: none;
+    }
+
+    .dashboard.active {
+      display: block;
+    }
+
+    .header {
+      background: white;
+      padding: 16px 24px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h2 {
+      font-size: 20px;
+      color: #1a1a2e;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logout-btn {
+      background: #f5f6fa;
+      color: #333;
+      border: 1px solid #ddd;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .logout-btn:hover {
+      background: #e8e9ed;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      padding: 12px 24px;
+      background: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: #6c5ce7;
+      color: white;
+    }
+
+    .tab:hover:not(.active) {
+      background: #e8e9ed;
+    }
+
+    .tab-badge {
+      background: #ff7675;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      margin-left: 8px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .stat-card h3 {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+
+    .stat-card .value.pending {
+      color: #fdcb6e;
+    }
+
+    .stat-card .value.verified {
+      color: #00b894;
+    }
+
+    .filters {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .filters select {
+      padding: 10px 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white;
+    }
+
+    .filters input {
+      padding: 10px 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      flex: 1;
+    }
+
+    .table-container {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    th {
+      background: #f8f9fa;
+      font-weight: 600;
+      color: #333;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    td {
+      font-size: 14px;
+      color: #444;
+    }
+
+    tr:hover {
+      background: #f8f9fa;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-pending {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .status-verified {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .status-rejected {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+
+    .empty-state svg {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+      padding-bottom: 20px;
+    }
+
+    .pagination button {
+      padding: 8px 14px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .pagination button:hover:not(:disabled) {
+      background: #f5f6fa;
+    }
+
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pagination button.active {
+      background: #6c5ce7;
+      color: white;
+      border-color: #6c5ce7;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-header h3 {
+      font-size: 18px;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #999;
+    }
+
+    .detail-row {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .detail-label {
+      width: 140px;
+      font-weight: 500;
+      color: #666;
+    }
+
+    .detail-value {
+      flex: 1;
+      color: #333;
+    }
+
+    @media (max-width: 768px) {
+      .filters {
+        flex-direction: column;
+      }
+
+      table {
+        font-size: 12px;
+      }
+
+      th, td {
+        padding: 10px 8px;
+      }
+
+      .actions {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div class="login-container" id="loginContainer">
+    <div class="login-box">
+      <h1>KrewsUp Admin</h1>
+      <p>Sign in to manage users</p>
+      <form id="loginForm">
+        <div class="form-group">
+          <label>Phone / Email</label>
+          <input type="text" id="loginPhone" placeholder="admin" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Sign In</button>
+        <div class="error-msg" id="loginError"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dashboard" id="dashboard">
+    <div class="header">
+      <h2>KrewsUp Admin Panel</h2>
+      <div class="header-right">
+        <span id="adminEmail">admin</span>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
+    </div>
+
+    <div class="container">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('gigworkers')">
+          Gig Workers
+          <span class="tab-badge" id="pendingWorkersBadge">0</span>
+        </button>
+        <button class="tab" onclick="switchTab('organizers')">
+          Organizers
+          <span class="tab-badge" id="pendingOrganizersBadge">0</span>
+        </button>
+      </div>
+
+      <!-- Gig Workers Section -->
+      <div class="section active" id="gigworkersSection">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Total Workers</h3>
+            <div class="value" id="totalWorkers">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Pending</h3>
+            <div class="value pending" id="pendingWorkers">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Verified</h3>
+            <div class="value verified" id="verifiedWorkers">0</div>
+          </div>
+        </div>
+
+        <div class="filters">
+          <select id="workerStatusFilter" onchange="loadWorkers(1)">
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="verified">Verified</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input type="text" id="workerSearch" placeholder="Search by name, email, or phone..." onkeyup="debounceSearch()">
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Applications</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="workersTableBody">
+              <tr>
+                <td colspan="7" class="loading">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination" id="workersPagination"></div>
+      </div>
+
+      <!-- Organizers Section -->
+      <div class="section" id="organizersSection">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Total Organizers</h3>
+            <div class="value" id="totalOrganizers">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Pending</h3>
+            <div class="value pending" id="pendingOrganizers">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Verified</h3>
+            <div class="value verified" id="verifiedOrganizers">0</div>
+          </div>
+        </div>
+
+        <div class="filters">
+          <select id="organizerStatusFilter" onchange="loadOrganizers(1)">
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="verified">Verified</option>
+          </select>
+          <input type="text" id="organizerSearch" placeholder="Search by name, company, or phone..." onkeyup="debounceOrganizerSearch()">
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Company</th>
+                <th>Contact</th>
+                <th>Events</th>
+                <th>Status</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="organizersTableBody">
+              <tr>
+                <td colspan="7" class="loading">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination" id="organizersPagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal" id="detailModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">Details</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+
+    let token = localStorage.getItem('adminToken');
+    let currentWorkersPage = 1;
+    let currentOrganizersPage = 1;
+    let searchTimeout = null;
+
+    // ─── Auth ────────────────────────────────────────────────
+    function checkAuth() {
+      if (token) {
+        document.getElementById('loginContainer').style.display = 'none';
+        document.getElementById('dashboard').classList.add('active');
+        loadStats();
+        loadWorkers();
+        loadOrganizers();
+      }
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const phone = document.getElementById('loginPhone').value;
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const res = await fetch(`${API_URL}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, password })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          token = data.data.token;
+          localStorage.setItem('adminToken', token);
+          document.getElementById('loginContainer').style.display = 'none';
+          document.getElementById('dashboard').classList.add('active');
+          loadStats();
+          loadWorkers();
+          loadOrganizers();
+        } else {
+          document.getElementById('loginError').textContent = data.error || 'Login failed';
+        }
+      } catch (err) {
+        document.getElementById('loginError').textContent = 'Connection error';
+      }
+    });
+
+    function logout() {
+      token = null;
+      localStorage.removeItem('adminToken');
+      location.reload();
+    }
+
+    // ─── API Helper ──────────────────────────────────────────
+    async function api(endpoint, options = {}) {
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+      return res.json();
+    }
+
+    // ─── Tabs ────────────────────────────────────────────────
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(`${tab}Section`).classList.add('active');
+    }
+
+    // ─── Stats ───────────────────────────────────────────────
+    async function loadStats() {
+      const [workersStats, organizersStats] = await Promise.all([
+        api('/api/admin/gigworkers/stats'),
+        api('/api/admin/organizers/stats')
+      ]);
+
+      if (workersStats.success) {
+        document.getElementById('totalWorkers').textContent = workersStats.data.total;
+        document.getElementById('pendingWorkers').textContent = workersStats.data.pending;
+        document.getElementById('verifiedWorkers').textContent = workersStats.data.verified;
+        document.getElementById('pendingWorkersBadge').textContent = workersStats.data.pending;
+      }
+
+      if (organizersStats.success) {
+        document.getElementById('totalOrganizers').textContent = organizersStats.data.total;
+        document.getElementById('pendingOrganizers').textContent = organizersStats.data.pending;
+        document.getElementById('verifiedOrganizers').textContent = organizersStats.data.verified;
+        document.getElementById('pendingOrganizersBadge').textContent = organizersStats.data.pending;
+      }
+    }
+
+    // ─── Gig Workers ─────────────────────────────────────────
+    async function loadWorkers(page = 1) {
+      currentWorkersPage = page;
+      const status = document.getElementById('workerStatusFilter').value;
+      const search = document.getElementById('workerSearch').value;
+
+      let endpoint = `/api/admin/gigworkers?page=${page}&limit=20&status=${status}`;
+      if (search) endpoint += `&search=${encodeURIComponent(search)}`;
+
+      const data = await api(endpoint);
+      const tbody = document.getElementById('workersTableBody');
+
+      if (!data.success) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load data</td></tr>';
+        return;
+      }
+
+      if (data.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No gig workers found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.data.map(w => `
+        <tr>
+          <td><strong>${w.name || 'N/A'}</strong></td>
+          <td>
+            <div>${w.email || '-'}</div>
+            <div style="color:#999;font-size:12px">${w.phone || '-'}</div>
+          </td>
+          <td>${w.location || '-'}</td>
+          <td>
+            <span class="status-badge status-${w.verification_status || 'pending'}">
+              ${w.verification_status || 'pending'}
+            </span>
+          </td>
+          <td>${w.total_applications || 0}</td>
+          <td>${formatDate(w.created_at)}</td>
+          <td class="actions">
+            <button class="btn btn-success btn-sm" onclick="verifyWorker('${w.id}')" ${w.verification_status === 'verified' ? 'disabled' : ''}>
+              Verify
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="rejectWorker('${w.id}')" ${w.verification_status === 'rejected' ? 'disabled' : ''}>
+              Reject
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      renderPagination('workersPagination', data.meta, (p) => loadWorkers(p));
+    }
+
+    async function verifyWorker(id) {
+      if (!confirm('Verify this gig worker?')) return;
+      const data = await api(`/api/admin/gigworkers/${id}/verify`, { method: 'POST' });
+      if (data.success) {
+        loadWorkers(currentWorkersPage);
+        loadStats();
+      } else {
+        alert('Failed: ' + data.error);
+      }
+    }
+
+    async function rejectWorker(id) {
+      if (!confirm('Reject this gig worker?')) return;
+      const data = await api(`/api/admin/gigworkers/${id}/reject`, { method: 'POST' });
+      if (data.success) {
+        loadWorkers(currentWorkersPage);
+        loadStats();
+      } else {
+        alert('Failed: ' + data.error);
+      }
+    }
+
+    // ─── Organizers ──────────────────────────────────────────
+    async function loadOrganizers(page = 1) {
+      currentOrganizersPage = page;
+      const status = document.getElementById('organizerStatusFilter').value;
+      const search = document.getElementById('organizerSearch').value;
+
+      let endpoint = `/api/admin/organizers?page=${page}&limit=20&status=${status}`;
+      if (search) endpoint += `&search=${encodeURIComponent(search)}`;
+
+      const data = await api(endpoint);
+      const tbody = document.getElementById('organizersTableBody');
+
+      if (!data.success) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load data</td></tr>';
+        return;
+      }
+
+      if (data.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No organizers found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.data.map(o => `
+        <tr>
+          <td><strong>${o.name || 'N/A'}</strong></td>
+          <td>${o.company_name || '-'}</td>
+          <td>
+            <div>${o.email || '-'}</div>
+            <div style="color:#999;font-size:12px">${o.phone || '-'}</div>
+          </td>
+          <td>${o.total_events || 0}</td>
+          <td>
+            <span class="status-badge status-${o.verified ? 'verified' : 'pending'}">
+              ${o.verified ? 'verified' : 'pending'}
+            </span>
+          </td>
+          <td>${formatDate(o.created_at)}</td>
+          <td class="actions">
+            <button class="btn btn-success btn-sm" onclick="verifyOrganizer('${o.id}')" ${o.verified ? 'disabled' : ''}>
+              Verify
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="rejectOrganizer('${o.id}')">
+              Reject
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      renderPagination('organizersPagination', data.meta, (p) => loadOrganizers(p));
+    }
+
+    async function verifyOrganizer(id) {
+      if (!confirm('Verify this organizer?')) return;
+      const data = await api(`/api/admin/organizers/${id}/verify`, { method: 'POST' });
+      if (data.success) {
+        loadOrganizers(currentOrganizersPage);
+        loadStats();
+      } else {
+        alert('Failed: ' + data.error);
+      }
+    }
+
+    async function rejectOrganizer(id) {
+      if (!confirm('Reject this organizer?')) return;
+      const data = await api(`/api/admin/organizers/${id}/reject`, { method: 'POST' });
+      if (data.success) {
+        loadOrganizers(currentOrganizersPage);
+        loadStats();
+      } else {
+        alert('Failed: ' + data.error);
+      }
+    }
+
+    // ─── Helpers ───────────────────────────────────────────────
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function renderPagination(containerId, meta, callback) {
+      const container = document.getElementById(containerId);
+      if (!meta || meta.totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+      }
+
+      let html = '';
+      for (let i = 1; i <= meta.totalPages; i++) {
+        html += `<button class="${i === meta.page ? 'active' : ''}" onclick="callback(${i})">${i}</button>`;
+      }
+      container.innerHTML = html;
+    }
+
+    function debounceSearch() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => loadWorkers(1), 300);
+    }
+
+    function debounceOrganizerSearch() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => loadOrganizers(1), 300);
+    }
+
+    function closeModal() {
+      document.getElementById('detailModal').classList.remove('active');
+    }
+
+    // Init
+    checkAuth();
+  </script>
+</body>
+</html>
