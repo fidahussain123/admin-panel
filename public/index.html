@@ -459,34 +459,10 @@
   </style>
 </head>
 <body>
-  <!-- Login Screen -->
-  <div class="login-container" id="loginContainer">
-    <div class="login-box">
-      <h1>KrewsUp Admin</h1>
-      <p>Sign in to manage users</p>
-      <form id="loginForm">
-        <div class="form-group">
-          <label>Phone / Email</label>
-          <input type="text" id="loginPhone" placeholder="admin" required>
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="loginPassword" placeholder="Enter password" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Sign In</button>
-        <div class="error-msg" id="loginError"></div>
-      </form>
-    </div>
-  </div>
-
   <!-- Dashboard -->
-  <div class="dashboard" id="dashboard">
+  <div class="dashboard active" id="dashboard">
     <div class="header">
       <h2>KrewsUp Admin Panel</h2>
-      <div class="header-right">
-        <span id="adminEmail">admin</span>
-        <button class="logout-btn" onclick="logout()">Logout</button>
-      </div>
     </div>
 
     <div class="container">
@@ -519,16 +495,6 @@
           </div>
         </div>
 
-        <div class="filters">
-          <select id="workerStatusFilter" onchange="loadWorkers(1)">
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="verified">Verified</option>
-            <option value="rejected">Rejected</option>
-          </select>
-          <input type="text" id="workerSearch" placeholder="Search by name, email, or phone..." onkeyup="debounceSearch()">
-        </div>
-
         <div class="table-container">
           <table>
             <thead>
@@ -538,8 +504,8 @@
                 <th>Location</th>
                 <th>Status</th>
                 <th>Applications</th>
+                <th>Earned</th>
                 <th>Joined</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="workersTableBody">
@@ -568,15 +534,6 @@
             <h3>Verified</h3>
             <div class="value verified" id="verifiedOrganizers">0</div>
           </div>
-        </div>
-
-        <div class="filters">
-          <select id="organizerStatusFilter" onchange="loadOrganizers(1)">
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="verified">Verified</option>
-          </select>
-          <input type="text" id="organizerSearch" placeholder="Search by name, company, or phone..." onkeyup="debounceOrganizerSearch()">
         </div>
 
         <div class="table-container">
@@ -617,71 +574,70 @@
   </div>
 
   <script>
-    const API_URL = window.location.origin;
+    // Same base URL as the React Native app (lib/config.ts → EXPO_PUBLIC_API_URL)
+    const API_BASE_URL = 'http://13.126.136.144:3001/api';
 
-    let token = localStorage.getItem('adminToken');
+    // Embedded admin credentials. Anyone who opens dev tools can read these —
+    // only acceptable because the panel is meant for trusted/internal use.
+    // To rotate, change ADMIN_PHONES / ADMIN_PASSWORD in backend/.env and update here.
+    const ADMIN_PHONE = '+919876543210';
+    const ADMIN_PASSWORD = 'krewsup@1234';
+
     let currentWorkersPage = 1;
     let currentOrganizersPage = 1;
-    let searchTimeout = null;
+    let adminToken = localStorage.getItem('adminToken') || null;
+    let loginPromise = null;
 
-    // ─── Auth ────────────────────────────────────────────────
-    function checkAuth() {
-      if (token) {
-        document.getElementById('loginContainer').style.display = 'none';
-        document.getElementById('dashboard').classList.add('active');
-        loadStats();
-        loadWorkers();
-        loadOrganizers();
-      }
-    }
-
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const phone = document.getElementById('loginPhone').value;
-      const password = document.getElementById('loginPassword').value;
-
-      try {
-        const res = await fetch(`${API_URL}/api/admin/login`, {
+    // ─── Auto-login ──────────────────────────────────────────
+    async function login() {
+      // De-dupe concurrent login attempts.
+      if (loginPromise) return loginPromise;
+      loginPromise = (async () => {
+        const res = await fetch(`${API_BASE_URL}/admin/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, password })
+          body: JSON.stringify({ phone: ADMIN_PHONE, password: ADMIN_PASSWORD }),
         });
-
-        const data = await res.json();
-
-        if (data.success) {
-          token = data.data.token;
-          localStorage.setItem('adminToken', token);
-          document.getElementById('loginContainer').style.display = 'none';
-          document.getElementById('dashboard').classList.add('active');
-          loadStats();
-          loadWorkers();
-          loadOrganizers();
-        } else {
-          document.getElementById('loginError').textContent = data.error || 'Login failed';
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body?.data?.token) {
+          throw new Error(body?.error || `Login failed (${res.status})`);
         }
-      } catch (err) {
-        document.getElementById('loginError').textContent = 'Connection error';
-      }
-    });
-
-    function logout() {
-      token = null;
-      localStorage.removeItem('adminToken');
-      location.reload();
+        adminToken = body.data.token;
+        localStorage.setItem('adminToken', adminToken);
+        return adminToken;
+      })().finally(() => { loginPromise = null; });
+      return loginPromise;
     }
 
     // ─── API Helper ──────────────────────────────────────────
+    // Mirrors lib/api.ts → adminRequest in the RN app: Bearer token + auto-retry on 401.
     async function api(endpoint, options = {}) {
-      const res = await fetch(`${API_URL}${endpoint}`, {
+      if (!adminToken) {
+        try { await login(); } catch (err) { return { success: false, error: err.message }; }
+      }
+
+      const doFetch = (token) => fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          ...options.headers
-        }
+          Authorization: `Bearer ${token}`,
+          ...options.headers,
+        },
       });
-      return res.json();
+
+      let res = await doFetch(adminToken);
+      if (res.status === 401) {
+        // Token expired/invalid — refresh once and retry.
+        adminToken = null;
+        localStorage.removeItem('adminToken');
+        try {
+          const fresh = await login();
+          res = await doFetch(fresh);
+        } catch (err) {
+          return { success: false, error: 'Auth failed: ' + err.message };
+        }
+      }
+      return res.json().catch(() => ({ success: false, error: 'Invalid JSON from server' }));
     }
 
     // ─── Tabs ────────────────────────────────────────────────
@@ -693,36 +649,39 @@
       document.getElementById(`${tab}Section`).classList.add('active');
     }
 
+    // Cache last-known organizer page so we can recompute the org stat card
+    // after a verify/reject without refetching the whole list.
+    let lastOrganizers = [];
+    let lastOrganizersTotal = 0;
+
     // ─── Stats ───────────────────────────────────────────────
     async function loadStats() {
-      const [workersStats, organizersStats] = await Promise.all([
-        api('/api/admin/gigworkers/stats'),
-        api('/api/admin/organizers/stats')
-      ]);
+      const workersStats = await api('/admin/gigworkers/all-stats');
 
-      if (workersStats.success) {
-        document.getElementById('totalWorkers').textContent = workersStats.data.total;
-        document.getElementById('pendingWorkers').textContent = workersStats.data.pending;
-        document.getElementById('verifiedWorkers').textContent = workersStats.data.verified;
-        document.getElementById('pendingWorkersBadge').textContent = workersStats.data.pending;
+      if (workersStats.success && workersStats.data) {
+        const total = Number(workersStats.data.total_workers || 0);
+        const verified = Number(workersStats.data.verified_workers || 0);
+        const pending = Math.max(0, total - verified);
+        document.getElementById('totalWorkers').textContent = total;
+        document.getElementById('verifiedWorkers').textContent = verified;
+        document.getElementById('pendingWorkers').textContent = pending;
+        document.getElementById('pendingWorkersBadge').textContent = pending;
       }
+    }
 
-      if (organizersStats.success) {
-        document.getElementById('totalOrganizers').textContent = organizersStats.data.total;
-        document.getElementById('pendingOrganizers').textContent = organizersStats.data.pending;
-        document.getElementById('verifiedOrganizers').textContent = organizersStats.data.verified;
-        document.getElementById('pendingOrganizersBadge').textContent = organizersStats.data.pending;
-      }
+    function refreshOrganizerStats() {
+      const verified = lastOrganizers.filter(o => o.verified).length;
+      const pending = lastOrganizers.length - verified;
+      document.getElementById('totalOrganizers').textContent = lastOrganizersTotal;
+      document.getElementById('verifiedOrganizers').textContent = verified;
+      document.getElementById('pendingOrganizers').textContent = pending;
+      document.getElementById('pendingOrganizersBadge').textContent = pending;
     }
 
     // ─── Gig Workers ─────────────────────────────────────────
     async function loadWorkers(page = 1) {
       currentWorkersPage = page;
-      const status = document.getElementById('workerStatusFilter').value;
-      const search = document.getElementById('workerSearch').value;
-
-      let endpoint = `/api/admin/gigworkers?page=${page}&limit=20&status=${status}`;
-      if (search) endpoint += `&search=${encodeURIComponent(search)}`;
+      const endpoint = `/admin/gigworkers/all?page=${page}&limit=20`;
 
       const data = await api(endpoint);
       const tbody = document.getElementById('workersTableBody');
@@ -732,70 +691,41 @@
         return;
       }
 
-      if (data.data.length === 0) {
+      if (!data.data || data.data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No gig workers found</td></tr>';
         return;
       }
 
-      tbody.innerHTML = data.data.map(w => `
+      tbody.innerHTML = data.data.map(w => {
+        const loc = [w.city, w.country].filter(Boolean).join(', ') || '-';
+        const earned = Number(w.total_earned || 0);
+        return `
         <tr>
           <td><strong>${w.name || 'N/A'}</strong></td>
           <td>
             <div>${w.email || '-'}</div>
             <div style="color:#999;font-size:12px">${w.phone || '-'}</div>
           </td>
-          <td>${w.location || '-'}</td>
+          <td>${loc}</td>
           <td>
             <span class="status-badge status-${w.verification_status || 'pending'}">
               ${w.verification_status || 'pending'}
             </span>
           </td>
           <td>${w.total_applications || 0}</td>
+          <td>₹${earned.toLocaleString('en-IN')}</td>
           <td>${formatDate(w.created_at)}</td>
-          <td class="actions">
-            <button class="btn btn-success btn-sm" onclick="verifyWorker('${w.id}')" ${w.verification_status === 'verified' ? 'disabled' : ''}>
-              Verify
-            </button>
-            <button class="btn btn-danger btn-sm" onclick="rejectWorker('${w.id}')" ${w.verification_status === 'rejected' ? 'disabled' : ''}>
-              Reject
-            </button>
-          </td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       renderPagination('workersPagination', data.meta, (p) => loadWorkers(p));
     }
 
-    async function verifyWorker(id) {
-      if (!confirm('Verify this gig worker?')) return;
-      const data = await api(`/api/admin/gigworkers/${id}/verify`, { method: 'POST' });
-      if (data.success) {
-        loadWorkers(currentWorkersPage);
-        loadStats();
-      } else {
-        alert('Failed: ' + data.error);
-      }
-    }
-
-    async function rejectWorker(id) {
-      if (!confirm('Reject this gig worker?')) return;
-      const data = await api(`/api/admin/gigworkers/${id}/reject`, { method: 'POST' });
-      if (data.success) {
-        loadWorkers(currentWorkersPage);
-        loadStats();
-      } else {
-        alert('Failed: ' + data.error);
-      }
-    }
-
-    // ─── Organizers ──────────────────────────────────────────
+    // ─── Organizers (Companies) ──────────────────────────────
     async function loadOrganizers(page = 1) {
       currentOrganizersPage = page;
-      const status = document.getElementById('organizerStatusFilter').value;
-      const search = document.getElementById('organizerSearch').value;
-
-      let endpoint = `/api/admin/organizers?page=${page}&limit=20&status=${status}`;
-      if (search) endpoint += `&search=${encodeURIComponent(search)}`;
+      const endpoint = `/admin/companies?page=${page}&limit=20`;
 
       const data = await api(endpoint);
       const tbody = document.getElementById('organizersTableBody');
@@ -805,12 +735,17 @@
         return;
       }
 
-      if (data.data.length === 0) {
+      lastOrganizers = data.data || [];
+      lastOrganizersTotal = data.meta?.total || lastOrganizers.length;
+      refreshOrganizerStats();
+
+      if (lastOrganizers.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No organizers found</td></tr>';
         return;
       }
 
-      tbody.innerHTML = data.data.map(o => `
+      tbody.innerHTML = lastOrganizers.map(o => {
+        return `
         <tr>
           <td><strong>${o.name || 'N/A'}</strong></td>
           <td>${o.company_name || '-'}</td>
@@ -834,30 +769,32 @@
             </button>
           </td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       renderPagination('organizersPagination', data.meta, (p) => loadOrganizers(p));
     }
 
     async function verifyOrganizer(id) {
       if (!confirm('Verify this organizer?')) return;
-      const data = await api(`/api/admin/organizers/${id}/verify`, { method: 'POST' });
+      const data = await api(`/admin/companies/${id}/verify`, { method: 'POST' });
       if (data.success) {
         loadOrganizers(currentOrganizersPage);
-        loadStats();
       } else {
-        alert('Failed: ' + data.error);
+        alert('Failed: ' + (data.error || 'unknown'));
       }
     }
 
     async function rejectOrganizer(id) {
       if (!confirm('Reject this organizer?')) return;
-      const data = await api(`/api/admin/organizers/${id}/reject`, { method: 'POST' });
+      const data = await api(`/admin/companies/${id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'Rejected by admin' })
+      });
       if (data.success) {
         loadOrganizers(currentOrganizersPage);
-        loadStats();
       } else {
-        alert('Failed: ' + data.error);
+        alert('Failed: ' + (data.error || 'unknown'));
       }
     }
 
@@ -870,26 +807,16 @@
 
     function renderPagination(containerId, meta, callback) {
       const container = document.getElementById(containerId);
-      if (!meta || meta.totalPages <= 1) {
-        container.innerHTML = '';
-        return;
-      }
+      container.innerHTML = '';
+      if (!meta || meta.totalPages <= 1) return;
 
-      let html = '';
       for (let i = 1; i <= meta.totalPages; i++) {
-        html += `<button class="${i === meta.page ? 'active' : ''}" onclick="callback(${i})">${i}</button>`;
+        const btn = document.createElement('button');
+        btn.textContent = i;
+        if (i === meta.page) btn.classList.add('active');
+        btn.addEventListener('click', () => callback(i));
+        container.appendChild(btn);
       }
-      container.innerHTML = html;
-    }
-
-    function debounceSearch() {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => loadWorkers(1), 300);
-    }
-
-    function debounceOrganizerSearch() {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => loadOrganizers(1), 300);
     }
 
     function closeModal() {
@@ -897,7 +824,9 @@
     }
 
     // Init
-    checkAuth();
+    loadStats();
+    loadWorkers();
+    loadOrganizers();
   </script>
 </body>
 </html>
