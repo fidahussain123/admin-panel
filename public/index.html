@@ -254,12 +254,14 @@
     .table-container {
       background: white;
       border-radius: 12px;
-      overflow: hidden;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       box-shadow: 0 2px 10px rgba(0,0,0,0.05);
     }
 
     table {
       width: 100%;
+      min-width: 720px;        /* keep columns readable; container scrolls horizontally on phones */
       border-collapse: collapse;
     }
 
@@ -440,20 +442,115 @@
     }
 
     @media (max-width: 768px) {
+      /* Header / shell */
+      .header {
+        padding: 12px 16px;
+      }
+      .header h2 {
+        font-size: 16px;
+      }
+      .container {
+        padding: 12px;
+      }
+
+      /* Tabs scroll horizontally instead of wrapping */
+      .tabs {
+        gap: 6px;
+        margin-bottom: 16px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tab {
+        flex: 0 0 auto;
+        padding: 10px 14px;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .tab-badge {
+        padding: 1px 6px;
+        font-size: 11px;
+        margin-left: 6px;
+      }
+
+      /* Stat cards: 2 per row, smaller */
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .stat-card {
+        padding: 14px;
+      }
+      .stat-card h3 {
+        font-size: 12px;
+      }
+      .stat-card .value {
+        font-size: 22px;
+      }
+
+      /* Filters stack */
       .filters {
         flex-direction: column;
       }
 
+      /* Tables: scrollable container handles overflow */
       table {
         font-size: 12px;
       }
-
       th, td {
         padding: 10px 8px;
       }
-
+      th {
+        font-size: 11px;
+      }
+      .status-badge {
+        padding: 3px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
       .actions {
         flex-direction: column;
+        gap: 4px;
+      }
+      .btn-sm {
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+
+      /* Pagination wraps and stays touch-friendly */
+      .pagination {
+        flex-wrap: wrap;
+      }
+      .pagination button {
+        padding: 8px 12px;
+        min-width: 36px;
+      }
+
+      /* Modal: more room on phones */
+      .modal-content {
+        padding: 16px;
+        max-height: 90vh;
+      }
+
+      /* iOS Safari auto-zooms inputs/selects/textareas with font-size < 16px.
+         Force 16px on mobile so tapping a field doesn't zoom the page. */
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+
+      /* Inline status filter on Withdrawals tab — give it room on phones */
+      #withdrawalStatusFilter {
+        flex: 1 1 auto;
+        min-width: 140px;
+      }
+    }
+
+    /* Very small phones */
+    @media (max-width: 380px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -475,6 +572,30 @@
         <button class="tab" onclick="switchTab('organizers')">
           Organizers
           <span class="tab-badge" id="pendingOrganizersBadge">0</span>
+        </button>
+        <button class="tab" onclick="switchTab('events')">
+          Events
+          <span class="tab-badge" id="totalEventsBadge">0</span>
+        </button>
+        <button class="tab" onclick="switchTab('withdrawals')">
+          Withdrawals
+          <span class="tab-badge" id="pendingWithdrawalsBadge">0</span>
+        </button>
+        <button class="tab" onclick="switchTab('wallet')">
+          Wallet
+          <span class="tab-badge" id="missingCreditsBadge">0</span>
+        </button>
+        <button class="tab" onclick="switchTab('orgpayments')">
+          Organizer Payments
+          <span class="tab-badge" id="pendingOrgPayBadge">0</span>
+        </button>
+        <button class="tab" onclick="switchTab('flags')">
+          Flags
+          <span class="tab-badge" id="activeFlagsBadge">0</span>
+        </button>
+        <button class="tab" onclick="switchTab('ratings')">
+          Ratings
+          <span class="tab-badge" id="ratedUsersBadge">0</span>
         </button>
       </div>
 
@@ -502,7 +623,6 @@
                 <th>Name</th>
                 <th>Contact</th>
                 <th>Location</th>
-                <th>Status</th>
                 <th>Applications</th>
                 <th>Earned</th>
                 <th>Joined</th>
@@ -510,7 +630,7 @@
             </thead>
             <tbody id="workersTableBody">
               <tr>
-                <td colspan="7" class="loading">Loading...</td>
+                <td colspan="6" class="loading">Loading...</td>
               </tr>
             </tbody>
           </table>
@@ -559,6 +679,266 @@
 
         <div class="pagination" id="organizersPagination"></div>
       </div>
+
+      <!-- Events Section -->
+      <div class="section" id="eventsSection">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Total Events</h3>
+            <div class="value" id="totalEvents">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Published</h3>
+            <div class="value verified" id="publishedEvents">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Draft / Other</h3>
+            <div class="value pending" id="draftEvents">0</div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Organizer</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Applicants</th>
+                <th>Accepted</th>
+                <th>₹99 Deposit</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="eventsTableBody">
+              <tr>
+                <td colspan="8" class="loading">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination" id="eventsPagination"></div>
+      </div>
+
+      <!-- Withdrawals Section -->
+      <div class="section" id="withdrawalsSection">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Pending</h3>
+            <div class="value pending" id="pendingWithdrawals">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Pending Amount</h3>
+            <div class="value" id="pendingWithdrawalsAmount">₹0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Total Requests</h3>
+            <div class="value" id="totalWithdrawals">0</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="loadWithdrawals(1)">Refresh</button>
+          <select id="withdrawalStatusFilter" onchange="loadWithdrawals(1)"
+            style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px">
+            <option value="">All status</option>
+            <option value="pending" selected>Pending</option>
+            <option value="approved">Approved</option>
+            <option value="paid">Paid</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Worker</th>
+                <th>Amount</th>
+                <th>Payment method</th>
+                <th>Status</th>
+                <th>Requested</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="withdrawalsTableBody">
+              <tr>
+                <td colspan="6" class="loading">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination" id="withdrawalsPagination"></div>
+      </div>
+
+      <!-- Wallet / Missing Credits Section -->
+      <div class="section" id="walletSection">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Missing Credits</h3>
+            <div class="value pending" id="missingCount">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Total Owed</h3>
+            <div class="value" id="missingTotal">₹0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Zero-Pay Skips</h3>
+            <div class="value" id="missingZero">0</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="loadMissingCredits()">Refresh</button>
+          <button class="btn btn-success btn-sm" id="backfillSelectedBtn" onclick="backfillSelected()" disabled>
+            Backfill selected (<span id="selectedCount">0</span>)
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="backfillAll()">Backfill all</button>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px">
+                  <input type="checkbox" id="walletSelectAll" onclick="toggleSelectAll(this)">
+                </th>
+                <th>Event</th>
+                <th>Worker</th>
+                <th>Gender</th>
+                <th>Earning</th>
+                <th>Checked out</th>
+              </tr>
+            </thead>
+            <tbody id="walletTableBody">
+              <tr>
+                <td colspan="6" class="loading">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Organizer Payments Section (item 13: pending-to-pay + paid organizers, with event details) -->
+      <div class="section" id="orgpaymentsSection">
+        <div class="stats-grid">
+          <div class="stat-card"><h3>Pending to Pay</h3><div class="value pending" id="orgPendingCount">0</div></div>
+          <div class="stat-card"><h3>Pending Amount</h3><div class="value" id="orgPendingAmount">₹0</div></div>
+          <div class="stat-card"><h3>Paid Organizers</h3><div class="value verified" id="orgPaidCount">0</div></div>
+          <div class="stat-card"><h3>Paid Amount</h3><div class="value" id="orgPaidAmount">₹0</div></div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="loadOrgPayments()">Refresh</button>
+        </div>
+
+        <h3 style="margin:8px 0 10px;color:#1a1a2e;font-size:16px">Pending to Pay KrewsUp</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Organizer</th>
+                <th>Company</th>
+                <th>Event</th>
+                <th>Event date</th>
+                <th>Event total</th>
+                <th>Commission</th>
+                <th>Type</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="orgPendingTableBody"><tr><td colspan="8" class="loading">Loading...</td></tr></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin:20px 0 10px;color:#1a1a2e;font-size:16px">Paid Organizers</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Organizer</th>
+                <th>Company</th>
+                <th>Event</th>
+                <th>Event date</th>
+                <th>Event total</th>
+                <th>Commission</th>
+                <th>Paid on</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="orgPaidTableBody"><tr><td colspan="8" class="loading">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Flags Section (item 12: project all organizer-selected flags to the respective crews) -->
+      <div class="section" id="flagsSection">
+        <div class="stats-grid">
+          <div class="stat-card"><h3>Flagged Crew</h3><div class="value" id="flaggedCrewCount">0</div></div>
+          <div class="stat-card"><h3>Total Flags</h3><div class="value pending" id="totalFlagsCount">0</div></div>
+          <div class="stat-card"><h3>Severe Flags</h3><div class="value" id="severeFlagsCount" style="color:#d63031">0</div></div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="loadFlags()">Refresh</button>
+          <select id="flagSeverityFilter" onchange="loadFlags()" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px">
+            <option value="">All severities</option>
+            <option value="SEVERE">Severe only</option>
+            <option value="NORMAL">Normal only</option>
+          </select>
+        </div>
+
+        <div id="flagsList"><div class="loading">Loading...</div></div>
+      </div>
+
+      <!-- Ratings Section (star ratings + reviews for organizers and gig workers) -->
+      <div class="section" id="ratingsSection">
+        <div class="stats-grid">
+          <div class="stat-card"><h3>Rated Users</h3><div class="value" id="ratedUsersCount">0</div></div>
+          <div class="stat-card"><h3>Avg Organizer ★</h3><div class="value verified" id="avgOrganizerStars">—</div></div>
+          <div class="stat-card"><h3>Avg Worker ★</h3><div class="value verified" id="avgWorkerStars">—</div></div>
+          <div class="stat-card"><h3>Under Review</h3><div class="value" id="cautionUsersCount" style="color:#d63031">0</div></div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="loadRatings()">Refresh</button>
+        </div>
+
+        <h3 style="margin:8px 0 10px;color:#1a1a2e;font-size:16px">Organizers</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Organizer</th>
+                <th>Rating</th>
+                <th>Ratings</th>
+                <th>Badge</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="ratingsOrgTableBody"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+          </table>
+        </div>
+
+        <h3 style="margin:20px 0 10px;color:#1a1a2e;font-size:16px">Gig Workers</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Worker</th>
+                <th>Rating</th>
+                <th>Ratings</th>
+                <th>Badge</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="ratingsWorkerTableBody"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -573,70 +953,70 @@
     </div>
   </div>
 
-  <script>
-    // Same base URL as the React Native app (lib/config.ts → EXPO_PUBLIC_API_URL)
-    const API_BASE_URL = 'http://13.126.136.144:3001/api';
+  <!-- Reject Modal (used for withdrawals + organizers) -->
+  <div class="modal" id="rejectModal">
+    <div class="modal-content" style="max-width:440px">
+      <div class="modal-header">
+        <h3 id="rejectModalTitle">Reject</h3>
+        <button class="modal-close" onclick="closeRejectModal()">&times;</button>
+      </div>
+      <div style="color:#666;font-size:13px;margin-bottom:14px" id="rejectModalSubtitle">
+        Choose a reason. The worker is notified and any reserved balance is refunded.
+      </div>
 
-    // Embedded admin credentials. Anyone who opens dev tools can read these —
-    // only acceptable because the panel is meant for trusted/internal use.
-    // To rotate, change ADMIN_PHONES / ADMIN_PASSWORD in backend/.env and update here.
-    const ADMIN_PHONE = '+919876543210';
-    const ADMIN_PASSWORD = 'krewsup@1234';
+      <div class="form-group">
+        <label for="rejectReason">Reason</label>
+        <select id="rejectReason" onchange="onRejectReasonChange(this.value)" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;background:white">
+          <option value="">Select a reason…</option>
+          <option value="Invalid UPI ID">Invalid UPI ID</option>
+          <option value="UPI does not match profile">UPI does not match profile</option>
+          <option value="QR code unreadable or invalid">QR code unreadable or invalid</option>
+          <option value="Bank details incorrect">Bank details incorrect</option>
+          <option value="Account verification pending">Account verification pending</option>
+          <option value="Insufficient wallet balance">Insufficient wallet balance</option>
+          <option value="Duplicate request">Duplicate request</option>
+          <option value="Suspected fraud">Suspected fraud</option>
+          <option value="Worker not eligible">Worker not eligible</option>
+          <option value="__other__">Other (please specify)</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="rejectOtherGroup" style="display:none">
+        <label for="rejectOtherText">Custom reason</label>
+        <textarea id="rejectOtherText" rows="3" placeholder="Describe the reason…"
+          style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="rejectNotes">Additional notes (optional, internal)</label>
+        <textarea id="rejectNotes" rows="2" placeholder="Anything else for the audit log…"
+          style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical"></textarea>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="closeRejectModal()" style="background:#f5f6fa;color:#333;width:auto;padding:8px 16px">Cancel</button>
+        <button class="btn btn-danger btn-sm" onclick="submitReject()" style="padding:8px 16px">Reject</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Same-origin proxy. The Vercel serverless function (api/[...path].js)
+    // or local Express (src/server.js) handles admin login server-side.
+    const API_BASE_URL = '/api';
 
     let currentWorkersPage = 1;
     let currentOrganizersPage = 1;
-    let adminToken = localStorage.getItem('adminToken') || null;
-    let loginPromise = null;
+    let lastWorkers = [];
 
-    // ─── Auto-login ──────────────────────────────────────────
-    async function login() {
-      // De-dupe concurrent login attempts.
-      if (loginPromise) return loginPromise;
-      loginPromise = (async () => {
-        const res = await fetch(`${API_BASE_URL}/admin/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: ADMIN_PHONE, password: ADMIN_PASSWORD }),
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok || !body?.data?.token) {
-          throw new Error(body?.error || `Login failed (${res.status})`);
-        }
-        adminToken = body.data.token;
-        localStorage.setItem('adminToken', adminToken);
-        return adminToken;
-      })().finally(() => { loginPromise = null; });
-      return loginPromise;
-    }
-
-    // ─── API Helper ──────────────────────────────────────────
-    // Mirrors lib/api.ts → adminRequest in the RN app: Bearer token + auto-retry on 401.
     async function api(endpoint, options = {}) {
-      if (!adminToken) {
-        try { await login(); } catch (err) { return { success: false, error: err.message }; }
-      }
-
-      const doFetch = (token) => fetch(`${API_BASE_URL}${endpoint}`, {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
           ...options.headers,
         },
       });
-
-      let res = await doFetch(adminToken);
-      if (res.status === 401) {
-        // Token expired/invalid — refresh once and retry.
-        adminToken = null;
-        localStorage.removeItem('adminToken');
-        try {
-          const fresh = await login();
-          res = await doFetch(fresh);
-        } catch (err) {
-          return { success: false, error: 'Auth failed: ' + err.message };
-        }
-      }
       return res.json().catch(() => ({ success: false, error: 'Invalid JSON from server' }));
     }
 
@@ -687,31 +1067,34 @@
       const tbody = document.getElementById('workersTableBody');
 
       if (!data.success) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load data</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load data</td></tr>';
         return;
       }
 
       if (!data.data || data.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No gig workers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No gig workers found</td></tr>';
         return;
       }
 
-      tbody.innerHTML = data.data.map(w => {
+      lastWorkers = data.data;
+
+      tbody.innerHTML = lastWorkers.map(w => {
         const loc = [w.city, w.country].filter(Boolean).join(', ') || '-';
         const earned = Number(w.total_earned || 0);
+        const avatar = avatarThumb(w.avatar_url || w.profile_pic, w.name);
         return `
-        <tr>
-          <td><strong>${w.name || 'N/A'}</strong></td>
+        <tr onclick="openWorkerDetail('${w.id}')" style="cursor:pointer">
           <td>
-            <div>${w.email || '-'}</div>
-            <div style="color:#999;font-size:12px">${w.phone || '-'}</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${avatar}
+              <strong>${escapeHtml(w.name) || 'N/A'}</strong>
+            </div>
           </td>
-          <td>${loc}</td>
           <td>
-            <span class="status-badge status-${w.verification_status || 'pending'}">
-              ${w.verification_status || 'pending'}
-            </span>
+            <div>${escapeHtml(w.email) || '-'}</div>
+            <div style="color:#999;font-size:12px">${escapeHtml(w.phone) || '-'}</div>
           </td>
+          <td>${escapeHtml(loc)}</td>
           <td>${w.total_applications || 0}</td>
           <td>₹${earned.toLocaleString('en-IN')}</td>
           <td>${formatDate(w.created_at)}</td>
@@ -720,6 +1103,43 @@
       }).join('');
 
       renderPagination('workersPagination', data.meta, (p) => loadWorkers(p));
+    }
+
+    async function openWorkerDetail(id) {
+      const w = lastWorkers.find(x => x.id === id);
+      if (!w) return;
+
+      const location = [w.city, w.country].filter(Boolean).join(', ');
+      const status = w.verification_status || 'pending';
+      const statusBadge = `<span class="status-badge status-${status}">${status}</span>`;
+      const earned = '₹' + Number(w.total_earned || 0).toLocaleString('en-IN');
+      const rate = w.hourly_rate ? `₹${Number(w.hourly_rate).toLocaleString('en-IN')}/hr` : '';
+      const subtitle = w.phone || w.email || '';
+
+      document.getElementById('modalTitle').textContent = 'Gig Worker';
+      document.getElementById('modalContent').innerHTML = `
+        ${photoHeader(w.avatar_url || w.profile_pic, w.name, subtitle)}
+
+        ${detailRow('Status', statusBadge)}
+        ${detailRow('Rating', ratingDisplay(ratingSummaryFor(w.id)))}
+        ${detailRow('Phone', escapeHtml(w.phone))}
+        ${detailRow('Email', escapeHtml(w.email))}
+        ${detailRow('Location', escapeHtml(location))}
+        ${detailRow('Age', w.age)}
+        ${detailRow('Gender', escapeHtml(w.gender))}
+        ${detailRow('Skills', escapeHtml(Array.isArray(w.skills) ? w.skills.join(', ') : w.skills))}
+        ${detailRow('Bio', escapeHtml(w.bio))}
+        ${detailRow('Hourly Rate', escapeHtml(rate))}
+        ${detailRow('Experience', w.experience_years ? `${w.experience_years} yrs` : '')}
+        ${detailRow('UPI ID', escapeHtml(w.upi_id))}
+        ${detailRow('Aadhaar Doc', w.aadhaar_doc_url ? `<a href="${escapeHtml(w.aadhaar_doc_url)}" target="_blank" rel="noreferrer" style="color:#6c5ce7">View document</a>` : '-')}
+        ${detailRow('Applications', `${w.total_applications || 0} total · ${w.accepted_applications || 0} accepted`)}
+        ${detailRow('Total Earned', earned)}
+        ${detailRow('Onboarded', w.is_onboarded ? 'Yes' : 'No')}
+        ${detailRow('Joined', formatDate(w.created_at))}
+      `;
+
+      document.getElementById('detailModal').classList.add('active');
     }
 
     // ─── Organizers (Companies) ──────────────────────────────
@@ -745,10 +1165,16 @@
       }
 
       tbody.innerHTML = lastOrganizers.map(o => {
+        const avatar = avatarThumb(o.avatar_url, o.name || o.company_name);
         return `
-        <tr>
-          <td><strong>${o.name || 'N/A'}</strong></td>
-          <td>${o.company_name || '-'}</td>
+        <tr onclick="openOrganizerDetail('${o.id}')" style="cursor:pointer">
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${avatar}
+              <strong>${escapeHtml(o.name) || 'N/A'}</strong>
+            </div>
+          </td>
+          <td>${escapeHtml(o.company_name) || '-'}</td>
           <td>
             <div>${o.email || '-'}</div>
             <div style="color:#999;font-size:12px">${o.phone || '-'}</div>
@@ -760,7 +1186,7 @@
             </span>
           </td>
           <td>${formatDate(o.created_at)}</td>
-          <td class="actions">
+          <td class="actions" onclick="event.stopPropagation()">
             <button class="btn btn-success btn-sm" onclick="verifyOrganizer('${o.id}')" ${o.verified ? 'disabled' : ''}>
               Verify
             </button>
@@ -785,17 +1211,573 @@
       }
     }
 
-    async function rejectOrganizer(id) {
-      if (!confirm('Reject this organizer?')) return;
-      const data = await api(`/admin/companies/${id}/reject`, {
-        method: 'POST',
-        body: JSON.stringify({ reason: 'Rejected by admin' })
-      });
-      if (data.success) {
-        loadOrganizers(currentOrganizersPage);
-      } else {
-        alert('Failed: ' + (data.error || 'unknown'));
+    function rejectOrganizer(id) {
+      const o = lastOrganizers.find(x => x.id === id);
+      openRejectModal({ type: 'organizer', id, label: o?.company_name || o?.name });
+    }
+
+    // ─── Detail helpers ──────────────────────────────────────
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    function detailRow(label, value) {
+      return `<div class="detail-row">
+        <div class="detail-label">${label}</div>
+        <div class="detail-value">${value || '-'}</div>
+      </div>`;
+    }
+
+    function getInitials(name) {
+      if (!name) return '?';
+      const parts = String(name).trim().split(/\s+/);
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+
+    // Small round avatar for table rows (32px). Falls back to coloured initials circle.
+    function avatarThumb(url, name) {
+      const initials = escapeHtml(getInitials(name));
+      const fallback = `<div style="width:32px;height:32px;border-radius:50%;background:#6c5ce7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${initials}</div>`;
+      if (!url) return fallback;
+      return `<img src="${escapeHtml(url)}"
+        onerror="this.outerHTML='<div style=&quot;width:32px;height:32px;border-radius:50%;background:#6c5ce7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0&quot;>${initials}</div>'"
+        style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;background:#f0f0f0">`;
+    }
+
+    // Big photo card for the top of a detail modal (72px round + name/subtitle).
+    function photoHeader(url, name, subtitle) {
+      const initials = escapeHtml(getInitials(name));
+      const safeName = escapeHtml(name) || 'Unnamed';
+      const safeSub = escapeHtml(subtitle);
+      const fallback = `<div style="width:72px;height:72px;border-radius:50%;background:#6c5ce7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:600;flex-shrink:0">${initials}</div>`;
+      const img = url
+        ? `<img src="${escapeHtml(url)}"
+            onerror="this.outerHTML='<div style=&quot;width:72px;height:72px;border-radius:50%;background:#6c5ce7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:600;flex-shrink:0&quot;>${initials}</div>'"
+            style="width:72px;height:72px;border-radius:50%;object-fit:cover;background:#f0f0f0;flex-shrink:0">`
+        : fallback;
+      return `
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:14px;border-bottom:2px solid #eee">
+          ${img}
+          <div style="min-width:0;flex:1">
+            <div style="font-size:17px;font-weight:600;color:#1a1a2e;word-break:break-word">${safeName}</div>
+            <div style="color:#666;font-size:13px;margin-top:2px;word-break:break-word">${safeSub}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function openOrganizerDetail(id) {
+      const o = lastOrganizers.find(x => x.id === id);
+      if (!o) return;
+
+      document.getElementById('modalTitle').textContent = 'Organizer';
+
+      const location = [o.city, o.country].filter(Boolean).join(', ');
+      const statusBadge = `<span class="status-badge status-${o.verified ? 'verified' : 'pending'}">${o.verified ? 'verified' : 'pending'}</span>`;
+      const totalPaid = '₹' + Number(o.total_paid || 0).toLocaleString('en-IN');
+      const subtitle = o.company_name || o.phone || o.email || '';
+
+      document.getElementById('modalContent').innerHTML = `
+        ${photoHeader(o.avatar_url, o.name || o.company_name, subtitle)}
+        ${detailRow('Status', statusBadge)}
+        ${detailRow('Rating', ratingDisplay(ratingSummaryFor(o.id)))}
+        ${detailRow('Name', escapeHtml(o.name))}
+        ${detailRow('Company', escapeHtml(o.company_name))}
+        ${detailRow('Type', escapeHtml(o.organizer_type || o.company_type))}
+        ${detailRow('Email', escapeHtml(o.email))}
+        ${detailRow('Phone', escapeHtml(o.phone))}
+        ${detailRow('Location', escapeHtml(location))}
+        ${detailRow('GST', escapeHtml(o.gst_number))}
+        ${detailRow('PAN', escapeHtml(o.pan))}
+        ${detailRow('CIN', escapeHtml(o.cin))}
+        ${detailRow('Total Events', o.total_events || 0)}
+        ${detailRow('Total Paid', totalPaid)}
+        ${detailRow('Joined', formatDate(o.created_at))}
+
+        <div style="margin-top:20px;padding-top:16px;border-top:2px solid #eee">
+          <h4 style="font-size:14px;color:#666;margin-bottom:12px;text-transform:uppercase">Events</h4>
+          <div id="organizerEventsList" style="color:#999;font-size:13px">Loading…</div>
+        </div>
+
+        <div style="margin-top:20px;display:flex;gap:8px">
+          <button class="btn btn-success btn-sm" onclick="verifyOrganizer('${o.id}');closeModal()" ${o.verified ? 'disabled' : ''}>Verify</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectOrganizer('${o.id}');closeModal()">Reject</button>
+        </div>
+      `;
+
+      document.getElementById('detailModal').classList.add('active');
+
+      // Fetch this organizer's events.
+      const events = await api(`/admin/events/all?organizer_id=${id}&page=1&limit=20`);
+      const listEl = document.getElementById('organizerEventsList');
+      if (!listEl) return; // modal closed before response
+
+      if (!events.success) {
+        listEl.innerHTML = `<div style="color:#d63031">Failed to load events</div>`;
+        return;
       }
+      const rows = events.data || [];
+      if (rows.length === 0) {
+        listEl.innerHTML = `<div>No events yet.</div>`;
+        return;
+      }
+      listEl.innerHTML = rows.map(e => {
+        const status = e.status || 'draft';
+        const statusClass = status === 'published' ? 'verified' : (status === 'cancelled' ? 'rejected' : 'pending');
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid #eee">
+            <div style="font-weight:500;color:#1a1a2e">${escapeHtml(e.title) || 'Untitled'}</div>
+            <div style="margin-top:4px;font-size:12px;color:#666">
+              <span class="status-badge status-${statusClass}">${status}</span>
+              <span style="margin-left:8px">${e.total_applicants || 0} applicants · ${e.accepted_count || 0} accepted</span>
+            </div>
+            <div style="margin-top:2px;font-size:11px;color:#999">${formatDate(e.created_at)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Close modal when clicking outside the box.
+    document.getElementById('detailModal').addEventListener('click', (e) => {
+      if (e.target.id === 'detailModal') closeModal();
+    });
+
+    // ─── Events ──────────────────────────────────────────────
+    let currentEventsPage = 1;
+
+    let lastEvents = [];
+    async function loadEvents(page = 1) {
+      currentEventsPage = page;
+      const data = await api(`/admin/events/all?page=${page}&limit=20`);
+      const tbody = document.getElementById('eventsTableBody');
+
+      if (!data.success) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load events</td></tr>';
+        return;
+      }
+
+      const rows = data.data || [];
+      lastEvents = rows;
+      const total = data.meta?.total || rows.length;
+      const published = rows.filter(e => e.status === 'published').length;
+      const other = rows.length - published;
+      document.getElementById('totalEvents').textContent = total;
+      document.getElementById('publishedEvents').textContent = published;
+      document.getElementById('draftEvents').textContent = other;
+      document.getElementById('totalEventsBadge').textContent = total;
+
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No events found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(e => {
+        const org = e.company_name || e.organizer_name || '-';
+        const status = e.status || 'draft';
+        return `
+        <tr onclick="openEventCrew('${e.id}')" style="cursor:pointer">
+          <td><strong>${e.title || 'Untitled'}</strong></td>
+          <td>
+            <div>${org}</div>
+            <div style="color:#999;font-size:12px">${e.organizer_phone || ''}</div>
+          </td>
+          <td>${e.location || e.venue || '-'}</td>
+          <td><span class="status-badge status-${status === 'published' ? 'verified' : (status === 'cancelled' ? 'rejected' : 'pending')}">${status}</span></td>
+          <td>${e.total_applicants || 0}</td>
+          <td>${e.accepted_count || 0}</td>
+          <td>${depositBadge(e.deposit_paid_count, e.accepted_count)}</td>
+          <td>${formatDate(e.created_at)}</td>
+        </tr>`;
+      }).join('');
+
+      renderPagination('eventsPagination', data.meta, (p) => loadEvents(p));
+    }
+
+    // ₹99 deposit summary badge for the events table ("2/3 paid").
+    function depositBadge(paid, accepted) {
+      paid = Number(paid || 0); accepted = Number(accepted || 0);
+      if (accepted === 0) return '<span style="color:#999">—</span>';
+      const cls = paid >= accepted ? 'verified' : (paid === 0 ? 'rejected' : 'pending');
+      return `<span class="status-badge status-${cls}">${paid}/${accepted} paid</span>`;
+    }
+
+    // Click an event → list its accepted crew with each worker's ₹99 status.
+    async function openEventCrew(eventId) {
+      const ev = lastEvents.find(x => x.id === eventId);
+      document.getElementById('modalTitle').textContent = (ev?.title || 'Event') + ' — Accepted crew';
+      document.getElementById('modalContent').innerHTML = '<div class="loading">Loading crew…</div>';
+      document.getElementById('detailModal').classList.add('active');
+
+      const data = await api(`/admin/applications/all?event_id=${eventId}&status=accepted&limit=100`);
+      const rows = (data && data.data) || [];
+      if (rows.length === 0) {
+        document.getElementById('modalContent').innerHTML = '<div class="empty-state">No accepted crew yet.</div>';
+        return;
+      }
+      const isPaid = (a) => a.deposit_status === 'paid' || a.deposit_status === 'refunded';
+      const body = rows.map(a => {
+        const ds = a.deposit_status || 'none';
+        const badge = ds === 'paid' ? '<span class="status-badge status-verified">Paid ₹99</span>'
+          : ds === 'refunded' ? '<span class="status-badge status-verified">Paid · refunded</span>'
+          : ds === 'pending' ? '<span class="status-badge status-pending">Deposit pending</span>'
+          : ds === 'expired' ? '<span class="status-badge status-rejected">Expired</span>'
+          : '<span class="status-badge status-pending">—</span>';
+        return `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #f0f0f0">
+            ${avatarThumb(a.worker_avatar, a.worker_name)}
+            <div style="flex:1;min-width:0">
+              <div><strong>${escapeHtml(a.worker_name) || 'Unknown'}</strong></div>
+              <div style="color:#999;font-size:12px">${escapeHtml(a.worker_phone) || ''}</div>
+            </div>
+            ${badge}
+          </div>`;
+      }).join('');
+      const paid = rows.filter(isPaid).length;
+      document.getElementById('modalContent').innerHTML = `
+        <div style="margin-bottom:8px;color:#666;font-size:13px">${paid} of ${rows.length} accepted crew have paid the ₹99 deposit.</div>
+        ${body}
+      `;
+    }
+
+    // ─── Withdrawal Requests ─────────────────────────────────
+    let currentWithdrawalsPage = 1;
+    let lastWithdrawals = [];
+
+    async function loadWithdrawals(page = 1) {
+      currentWithdrawalsPage = page;
+      const status = document.getElementById('withdrawalStatusFilter').value;
+      let endpoint = `/admin/withdrawal-requests?page=${page}&limit=20`;
+      if (status) endpoint += `&status=${status}`;
+
+      const data = await api(endpoint);
+      const tbody = document.getElementById('withdrawalsTableBody');
+
+      if (!data.success) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Failed to load: ${escapeHtml(data.error) || 'unknown error'}</td></tr>`;
+        return;
+      }
+
+      lastWithdrawals = data.data || [];
+      const total = data.meta?.total ?? lastWithdrawals.length;
+      const pending = lastWithdrawals.filter(w => w.status === 'pending');
+      const pendingAmount = pending.reduce((s, w) => s + Number(w.amount || 0), 0);
+
+      document.getElementById('totalWithdrawals').textContent = total;
+      document.getElementById('pendingWithdrawals').textContent = pending.length;
+      document.getElementById('pendingWithdrawalsAmount').textContent = '₹' + pendingAmount.toLocaleString('en-IN');
+      document.getElementById('pendingWithdrawalsBadge').textContent = pending.length;
+
+      if (lastWithdrawals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No withdrawal requests</td></tr>';
+        document.getElementById('withdrawalsPagination').innerHTML = '';
+        return;
+      }
+
+      tbody.innerHTML = lastWithdrawals.map(w => {
+        const avatar = avatarThumb(w.worker_avatar, w.worker_name);
+        const statusClass = (
+          w.status === 'paid'      ? 'verified' :
+          w.status === 'rejected'  ? 'rejected' :
+                                     'pending'
+        );
+        let payment = '';
+        if (w.upi_id) {
+          payment = `<div><strong>UPI:</strong> ${escapeHtml(w.upi_id)}</div>`;
+          if (w.upi_qr_url) {
+            payment += `<div style="margin-top:2px"><a href="${escapeHtml(w.upi_qr_url)}" target="_blank" rel="noreferrer" style="color:#6c5ce7;font-size:12px" onclick="event.stopPropagation()">View QR</a></div>`;
+          }
+        } else if (w.bank_account) {
+          payment = `<div><strong>Bank:</strong> ${escapeHtml(w.bank_name) || '—'}</div>
+                     <div style="font-size:12px;color:#666">A/C ${escapeHtml(w.bank_account)} · IFSC ${escapeHtml(w.bank_ifsc) || '—'}</div>`;
+        } else {
+          payment = '<span style="color:#999">—</span>';
+        }
+        const canAct = w.status === 'pending' || w.status === 'approved';
+        return `
+          <tr onclick="openWithdrawalDetail('${w.id}')" style="cursor:pointer">
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                ${avatar}
+                <div>
+                  <div><strong>${escapeHtml(w.worker_name) || 'Unknown'}</strong></div>
+                  <div style="color:#999;font-size:12px">${escapeHtml(w.worker_phone) || ''}</div>
+                </div>
+              </div>
+            </td>
+            <td><strong>₹${Number(w.amount || 0).toLocaleString('en-IN')}</strong></td>
+            <td>${payment}</td>
+            <td><span class="status-badge status-${statusClass}">${w.status}</span></td>
+            <td style="font-size:12px;color:#666">${formatDate(w.requested_at || w.created_at)}</td>
+            <td class="actions" onclick="event.stopPropagation()">
+              <button class="btn btn-success btn-sm" onclick="markWithdrawalPaid('${w.id}')" ${canAct ? '' : 'disabled'}>Mark paid</button>
+              <button class="btn btn-danger btn-sm" onclick="rejectWithdrawal('${w.id}')" ${w.status === 'pending' ? '' : 'disabled'}>Reject</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      renderPagination('withdrawalsPagination', data.meta, (p) => loadWithdrawals(p));
+    }
+
+    function openWithdrawalDetail(id) {
+      const w = lastWithdrawals.find(x => x.id === id);
+      if (!w) return;
+
+      const statusClass = (w.status === 'paid' ? 'verified' : w.status === 'rejected' ? 'rejected' : 'pending');
+      const statusBadge = `<span class="status-badge status-${statusClass}">${w.status}</span>`;
+      const subtitle = w.worker_phone || w.worker_email || '';
+
+      let paymentRows = '';
+      if (w.upi_id) {
+        paymentRows += detailRow('UPI ID', escapeHtml(w.upi_id));
+        if (w.profile_upi && w.profile_upi !== w.upi_id) {
+          paymentRows += detailRow('Profile UPI', `${escapeHtml(w.profile_upi)} <span style="color:#d63031;font-size:11px">(differs from request)</span>`);
+        }
+      }
+      if (w.bank_account) {
+        paymentRows += detailRow('Bank', escapeHtml(w.bank_name));
+        paymentRows += detailRow('Account', escapeHtml(w.bank_account));
+        paymentRows += detailRow('IFSC', escapeHtml(w.bank_ifsc));
+      }
+
+      const canAct = w.status === 'pending' || w.status === 'approved';
+
+      document.getElementById('modalTitle').textContent = 'Withdrawal Request';
+      document.getElementById('modalContent').innerHTML = `
+        ${photoHeader(w.worker_avatar, w.worker_name, subtitle)}
+        ${detailRow('Status', statusBadge)}
+        ${detailRow('Amount', '<strong>₹' + Number(w.amount || 0).toLocaleString('en-IN') + '</strong>')}
+        ${paymentRows}
+        ${w.upi_qr_url ? `
+          <div class="detail-row">
+            <div class="detail-label">UPI QR</div>
+            <div class="detail-value">
+              <a href="${escapeHtml(w.upi_qr_url)}" target="_blank" rel="noreferrer">
+                <img src="${escapeHtml(w.upi_qr_url)}" style="max-width:180px;border-radius:8px;border:1px solid #eee">
+              </a>
+            </div>
+          </div>` : ''}
+        ${detailRow('Requested', formatDate(w.requested_at || w.created_at))}
+        ${w.processed_at ? detailRow('Processed', formatDate(w.processed_at)) : ''}
+        ${w.processed_by ? detailRow('Processed by', escapeHtml(w.processed_by)) : ''}
+        ${w.admin_notes  ? detailRow('Admin notes', escapeHtml(w.admin_notes)) : ''}
+
+        <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-success btn-sm" onclick="markWithdrawalPaid('${w.id}');closeModal()" ${canAct ? '' : 'disabled'}>Mark paid</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectWithdrawal('${w.id}');closeModal()" ${w.status === 'pending' ? '' : 'disabled'}>Reject</button>
+        </div>
+      `;
+      document.getElementById('detailModal').classList.add('active');
+    }
+
+    async function markWithdrawalPaid(id) {
+      const adminNotes = prompt('Optional notes (transaction ref, etc.). Leave blank to skip.', '');
+      if (adminNotes === null) return; // user cancelled
+      const data = await api(`/admin/withdrawal-requests/${id}/mark-paid`, {
+        method: 'POST',
+        body: JSON.stringify({ adminNotes: adminNotes || null })
+      });
+      if (!data.success) {
+        alert('Failed: ' + (data.error || 'unknown'));
+        return;
+      }
+      loadWithdrawals(currentWithdrawalsPage);
+    }
+
+    // ─── Reject Modal (shared by withdrawals + organizers) ──
+    // Holds the pending rejection target. Shape: { type, id, label }
+    // type ∈ {'withdrawal', 'organizer'} drives which endpoint we POST to.
+    let pendingReject = null;
+
+    function openRejectModal({ type, id, label }) {
+      pendingReject = { type, id, label };
+      document.getElementById('rejectModalTitle').textContent =
+        type === 'withdrawal' ? 'Reject Withdrawal' : 'Reject Organizer';
+      document.getElementById('rejectModalSubtitle').textContent =
+        type === 'withdrawal'
+          ? `${label || 'Worker'} will be notified and the reserved wallet balance will be refunded automatically.`
+          : `${label || 'Organizer'} will need to re-register after rejection.`;
+
+      // Reset state.
+      document.getElementById('rejectReason').value = '';
+      document.getElementById('rejectOtherText').value = '';
+      document.getElementById('rejectNotes').value = '';
+      document.getElementById('rejectOtherGroup').style.display = 'none';
+
+      document.getElementById('rejectModal').classList.add('active');
+    }
+
+    function closeRejectModal() {
+      document.getElementById('rejectModal').classList.remove('active');
+      pendingReject = null;
+    }
+
+    function onRejectReasonChange(value) {
+      document.getElementById('rejectOtherGroup').style.display =
+        value === '__other__' ? 'block' : 'none';
+    }
+
+    async function submitReject() {
+      if (!pendingReject) return;
+      const sel = document.getElementById('rejectReason').value;
+      const other = document.getElementById('rejectOtherText').value.trim();
+      const notes = document.getElementById('rejectNotes').value.trim();
+
+      if (!sel) { alert('Please pick a reason.'); return; }
+      if (sel === '__other__' && !other) { alert('Please type the custom reason.'); return; }
+
+      const reason = sel === '__other__' ? other : sel;
+      const adminNotes = notes ? `${reason} — ${notes}` : reason;
+
+      const { type, id } = pendingReject;
+      const endpoint = type === 'withdrawal'
+        ? `/admin/withdrawal-requests/${id}/reject`
+        : `/admin/companies/${id}/reject`;
+      const body = type === 'withdrawal'
+        ? { adminNotes }
+        : { reason: adminNotes };
+
+      const data = await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
+      if (!data.success) {
+        alert('Failed: ' + (data.error || 'unknown'));
+        return;
+      }
+
+      closeRejectModal();
+      if (type === 'withdrawal') loadWithdrawals(currentWithdrawalsPage);
+      else loadOrganizers(currentOrganizersPage);
+    }
+
+    // Close on backdrop click.
+    document.getElementById('rejectModal').addEventListener('click', (e) => {
+      if (e.target.id === 'rejectModal') closeRejectModal();
+    });
+
+    function rejectWithdrawal(id) {
+      const w = lastWithdrawals.find(x => x.id === id);
+      openRejectModal({ type: 'withdrawal', id, label: w?.worker_name });
+    }
+
+    // ─── Wallet / Missing Credits ────────────────────────────
+    let missingCredits = [];
+    let selectedAppIds = new Set();
+
+    async function loadMissingCredits() {
+      const tbody = document.getElementById('walletTableBody');
+      tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+
+      const data = await api('/admin/wallet/missing-credits');
+      if (!data.success) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Failed to load: ${escapeHtml(data.error) || 'unknown error'}</td></tr>`;
+        return;
+      }
+
+      missingCredits = data.data || [];
+      selectedAppIds.clear();
+      updateSelectionUI();
+
+      const zeroPay = missingCredits.filter(r => Number(r.computed_earning || 0) <= 0).length;
+      const totalOwed = missingCredits
+        .filter(r => Number(r.computed_earning || 0) > 0)
+        .reduce((sum, r) => sum + Number(r.computed_earning || 0), 0);
+
+      document.getElementById('missingCount').textContent = missingCredits.length;
+      document.getElementById('missingTotal').textContent = '₹' + totalOwed.toLocaleString('en-IN');
+      document.getElementById('missingZero').textContent = zeroPay;
+      document.getElementById('missingCreditsBadge').textContent = missingCredits.length;
+
+      if (missingCredits.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No missing credits. Everything looks reconciled.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = missingCredits.map(r => {
+        const earning = Number(r.computed_earning || 0);
+        const isZero = earning <= 0;
+        return `
+          <tr>
+            <td onclick="event.stopPropagation()">
+              <input type="checkbox"
+                data-app-id="${escapeHtml(r.application_id)}"
+                onchange="toggleRow(this)"
+                ${isZero ? 'disabled title="Zero pay — would be skipped"' : ''}>
+            </td>
+            <td><strong>${escapeHtml(r.title) || 'Untitled'}</strong></td>
+            <td style="font-family:monospace;font-size:11px;color:#666">${escapeHtml(String(r.worker_id || '').slice(0, 8))}…</td>
+            <td>${escapeHtml(r.gender) || '-'}</td>
+            <td>${isZero
+              ? '<span class="status-badge status-rejected">zero</span>'
+              : '₹' + earning.toLocaleString('en-IN')
+            }</td>
+            <td style="font-size:12px;color:#666">${formatDate(r.checked_out_at)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function toggleRow(cb) {
+      const id = cb.dataset.appId;
+      if (cb.checked) selectedAppIds.add(id);
+      else selectedAppIds.delete(id);
+      updateSelectionUI();
+    }
+
+    function toggleSelectAll(masterCb) {
+      const cbs = document.querySelectorAll('#walletTableBody input[type="checkbox"]:not([disabled])');
+      cbs.forEach(cb => {
+        cb.checked = masterCb.checked;
+        if (masterCb.checked) selectedAppIds.add(cb.dataset.appId);
+        else selectedAppIds.delete(cb.dataset.appId);
+      });
+      updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+      const btn = document.getElementById('backfillSelectedBtn');
+      const count = document.getElementById('selectedCount');
+      count.textContent = selectedAppIds.size;
+      btn.disabled = selectedAppIds.size === 0;
+    }
+
+    function summarizeBackfill(results) {
+      const credited = results.filter(r => r.status === 'credited');
+      const zero = results.filter(r => r.status === 'skipped_zero_pay');
+      const totalCredited = credited.reduce((s, r) => s + Number(r.amount || 0), 0);
+      return `Backfill complete:\n` +
+        `  • Credited: ${credited.length} (₹${totalCredited.toLocaleString('en-IN')})\n` +
+        `  • Skipped (zero pay): ${zero.length}`;
+    }
+
+    async function backfillAll() {
+      if (!confirm('Backfill credits for ALL missing-credit rows. Continue?')) return;
+      const data = await api('/admin/wallet/backfill-credits', {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+      if (!data.success) {
+        alert('Failed: ' + (data.error || 'unknown'));
+        return;
+      }
+      alert(summarizeBackfill(data.data || []));
+      loadMissingCredits();
+    }
+
+    async function backfillSelected() {
+      if (selectedAppIds.size === 0) return;
+      if (!confirm(`Backfill credits for ${selectedAppIds.size} selected row(s)?`)) return;
+      const data = await api('/admin/wallet/backfill-credits', {
+        method: 'POST',
+        body: JSON.stringify({ application_ids: Array.from(selectedAppIds) })
+      });
+      if (!data.success) {
+        alert('Failed: ' + (data.error || 'unknown'));
+        return;
+      }
+      alert(summarizeBackfill(data.data || []));
+      loadMissingCredits();
     }
 
     // ─── Helpers ───────────────────────────────────────────────
@@ -823,10 +1805,310 @@
       document.getElementById('detailModal').classList.remove('active');
     }
 
-    // Init
+    // ─── Organizer Payments to KrewsUp (item 13) ─────────────
+    // The organizer pays KrewsUp the full event total; `commission` is KrewsUp's
+    // platform cut out of that total. Source of truth for paid/pending is
+    // payments.payment_status ('completed' = paid, 'pending' = owes us).
+    function orgPayAmounts(r) {
+      return {
+        total: Number(r.event_total ?? r.amount ?? 0),
+        commission: Number(r.commission ?? 0),
+      };
+    }
+
+    function renderOrgPayRow(r, paid) {
+      const org = escapeHtml(r.organizer_name) || '-';
+      const phone = escapeHtml(r.organizer_phone) || '';
+      const company = escapeHtml(r.company_name) || '-';
+      const title = escapeHtml(r.event_title) || '-';
+      const date = formatDate(r.event_date);
+      const { total, commission } = orgPayAmounts(r);
+      const status = r.payment_status || (paid ? 'completed' : 'pending');
+      const sClass = status === 'completed' ? 'verified'
+        : (status === 'failed' || status === 'refunded' ? 'rejected' : 'pending');
+      const isLater = String(r.payment_id || '').startsWith('pay_later');
+      const lastCol = paid
+        ? `<td style="font-size:12px;color:#666">${formatDate(r.payment_date || r.updated_at || r.created_at)}</td>`
+        : `<td><span class="status-badge status-pending">${isLater ? 'Pay later' : 'Razorpay'}</span></td>`;
+      return `
+        <tr>
+          <td>
+            <div><strong>${org}</strong></div>
+            <div style="color:#999;font-size:12px">${phone}</div>
+          </td>
+          <td>${company}</td>
+          <td><strong>${title}</strong></td>
+          <td style="font-size:12px;color:#666">${date}</td>
+          <td>₹${total.toLocaleString('en-IN')}</td>
+          <td>₹${commission.toLocaleString('en-IN')}</td>
+          ${lastCol}
+          <td><span class="status-badge status-${sClass}">${escapeHtml(status)}</span></td>
+        </tr>`;
+    }
+
+    async function loadOrgPayments() {
+      const pBody = document.getElementById('orgPendingTableBody');
+      const dBody = document.getElementById('orgPaidTableBody');
+      pBody.innerHTML = '<tr><td colspan="8" class="loading">Loading...</td></tr>';
+      dBody.innerHTML = '<tr><td colspan="8" class="loading">Loading...</td></tr>';
+
+      const [pendRes, paidRes] = await Promise.all([
+        api('/admin/payments/with-event-name?status=pending&limit=200'),
+        api('/admin/payments/with-event-name?status=completed&limit=200'),
+      ]);
+
+      const pend = (pendRes && pendRes.success && pendRes.data) || [];
+      const paid = (paidRes && paidRes.success && paidRes.data) || [];
+
+      pBody.innerHTML = pend.length
+        ? pend.map(r => renderOrgPayRow(r, false)).join('')
+        : '<tr><td colspan="8" class="empty-state">No organizers pending payment 🎉</td></tr>';
+      dBody.innerHTML = paid.length
+        ? paid.map(r => renderOrgPayRow(r, true)).join('')
+        : '<tr><td colspan="8" class="empty-state">No paid organizer payments yet</td></tr>';
+
+      const pendAmt = pend.reduce((s, r) => s + orgPayAmounts(r).total, 0);
+      const paidAmt = paid.reduce((s, r) => s + orgPayAmounts(r).total, 0);
+      document.getElementById('orgPendingCount').textContent = pend.length;
+      document.getElementById('orgPendingAmount').textContent = '₹' + pendAmt.toLocaleString('en-IN');
+      document.getElementById('orgPaidCount').textContent = paid.length;
+      document.getElementById('orgPaidAmount').textContent = '₹' + paidAmt.toLocaleString('en-IN');
+      document.getElementById('pendingOrgPayBadge').textContent = pend.length;
+    }
+
+    // ─── Crew Flags raised by organizers (item 12) ───────────
+    // Project every flag an organizer raised onto the respective crew member.
+    const FLAG_LABELS = {
+      late_arrival: 'Late arrival',
+      left_early: 'Left early',
+      unprofessional_conduct: 'Unprofessional conduct',
+      dress_code_violation: 'Dress code violation',
+      negligence_on_duty: 'Negligence on duty',
+      misbehavior_guests_staff: 'Misbehavior with guests/staff',
+      intoxication_on_duty: 'Intoxication on duty',
+      harassment: 'Harassment',
+      theft_property_damage: 'Theft / property damage',
+      safety_violation: 'Safety violation',
+    };
+    function flagLabel(t) { return FLAG_LABELS[t] || String(t || '').replace(/_/g, ' '); }
+
+    async function loadFlags() {
+      const listEl = document.getElementById('flagsList');
+      listEl.innerHTML = '<div class="loading">Loading...</div>';
+      const severity = document.getElementById('flagSeverityFilter').value;
+      let endpoint = '/ratings/admin/flags?limit=200';
+      if (severity) endpoint += `&severity=${severity}`;
+
+      const res = await api(endpoint);
+      if (!res || !res.success) {
+        listEl.innerHTML = `<div class="empty-state">Failed to load flags: ${escapeHtml(res && res.error) || 'unknown error'}</div>`;
+        return;
+      }
+
+      // Only organizer→crew flags (the crew is the ratee). Group by crew member.
+      const crewFlags = (res.data || []).filter(f => String(f.ratee_role || '').toUpperCase() === 'CREW');
+      const severe = crewFlags.filter(f => String(f.severity || '').toUpperCase() === 'SEVERE').length;
+      const active = crewFlags.filter(f => String(f.status || '').toUpperCase() === 'ACTIVE').length;
+
+      const groups = {};
+      crewFlags.forEach(f => {
+        const key = f.ratee_id || 'unknown';
+        (groups[key] = groups[key] || { name: f.ratee_name, flags: [] }).flags.push(f);
+      });
+      const crewList = Object.values(groups);
+
+      document.getElementById('flaggedCrewCount').textContent = crewList.length;
+      document.getElementById('totalFlagsCount').textContent = crewFlags.length;
+      document.getElementById('severeFlagsCount').textContent = severe;
+      document.getElementById('activeFlagsBadge').textContent = active;
+
+      if (crewList.length === 0) {
+        listEl.innerHTML = '<div class="empty-state">No flags raised by organizers</div>';
+        return;
+      }
+
+      // Severe-flagged crew first, then by flag count.
+      crewList.sort((a, b) => {
+        const sa = a.flags.some(f => String(f.severity).toUpperCase() === 'SEVERE') ? 1 : 0;
+        const sb = b.flags.some(f => String(f.severity).toUpperCase() === 'SEVERE') ? 1 : 0;
+        return sb - sa || b.flags.length - a.flags.length;
+      });
+
+      listEl.innerHTML = crewList.map(crew => {
+        const avatar = avatarThumb(null, crew.name);
+        const flagRows = crew.flags.map(f => {
+          const sev = String(f.severity || 'NORMAL').toUpperCase();
+          const sevClass = sev === 'SEVERE' ? 'rejected' : 'pending';
+          const st = String(f.status || 'ACTIVE').toUpperCase();
+          const comment = f.comment ? `<div style="margin-top:4px;color:#444;font-size:13px">“${escapeHtml(f.comment)}”</div>` : '';
+          return `
+            <div style="padding:10px 0;border-bottom:1px solid #f0f0f0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="status-badge status-${sevClass}">${sev}</span>
+                <strong style="color:#1a1a2e">${escapeHtml(flagLabel(f.flag_type))}</strong>
+                <span style="color:#999;font-size:12px">· ${st}</span>
+              </div>
+              <div style="margin-top:4px;color:#666;font-size:12px">
+                Event: ${escapeHtml(f.event_title) || '-'} · raised by ${escapeHtml(f.rater_name) || 'organizer'} · ${formatDate(f.created_at)}
+              </div>
+              ${comment}
+            </div>`;
+        }).join('');
+        return `
+          <div class="stat-card" style="margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              ${avatar}
+              <div>
+                <div style="font-weight:600;color:#1a1a2e">${escapeHtml(crew.name) || 'Unknown crew'}</div>
+                <div style="color:#999;font-size:12px">${crew.flags.length} flag${crew.flags.length === 1 ? '' : 's'} from organizers</div>
+              </div>
+            </div>
+            ${flagRows}
+          </div>`;
+      }).join('');
+    }
+
+    // ─── Ratings & Reviews (star ratings in the admin panel) ─
+    // Fetched once into a map so the Ratings tab AND the worker/organizer detail
+    // modals can show ratings with no extra per-user calls.
+    let ratingSummaries = [];
+    let ratingSummaryMap = {};
+
+    function ratingSummaryFor(userId) { return ratingSummaryMap[userId] || null; }
+
+    // Inline rating string for a detail modal row.
+    function ratingDisplay(s) {
+      if (!s) return '<span style="color:#999">No ratings yet</span>';
+      const count = Number(s.ratings_count || 0);
+      const avg = Number(s.avg_stars || 0);
+      if (count === 0) return '<span style="color:#999">No ratings yet</span>';
+      const badge = s.badge_tier && s.badge_tier !== 'NEW'
+        ? ` · <span class="status-badge status-verified">${escapeHtml(s.badge_tier)}</span>` : '';
+      const caution = Number(s.active_severe_flags || 0) > 0
+        ? ` · <span class="status-badge status-rejected">⚠ under review</span>` : '';
+      const newTag = count < 3 ? ' <span style="color:#999;font-size:12px">(new)</span>' : '';
+      return `<strong style="color:#FBBF24">★ ${avg ? avg.toFixed(1) : '—'}</strong> <span style="color:#999">(${count})</span>${newTag}${badge}${caution}`;
+    }
+
+    function renderRatingRow(s) {
+      const avatar = avatarThumb(s.avatar_url, s.name);
+      const count = Number(s.ratings_count || 0);
+      const avg = Number(s.avg_stars || 0);
+      const isNew = count < 3;
+      const ratingCell = isNew
+        ? `<span style="color:#94a3b8;font-weight:600">New${count ? ` (${count})` : ''}</span>`
+        : `<strong style="color:#0A1628">★ ${avg.toFixed(1)}</strong>`;
+      const badge = s.badge_tier && s.badge_tier !== 'NEW'
+        ? `<span class="status-badge status-verified">${escapeHtml(s.badge_tier)}</span>` : '-';
+      const caution = Number(s.active_severe_flags || 0) > 0
+        ? `<span class="status-badge status-rejected">⚠ Under review</span>`
+        : `<span class="status-badge status-verified">OK</span>`;
+      return `
+        <tr onclick="openUserRatings('${s.user_id}')" style="cursor:pointer">
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${avatar}
+              <div>
+                <strong>${escapeHtml(s.name) || 'N/A'}</strong>
+                <div style="color:#999;font-size:12px">${escapeHtml(s.phone) || ''}</div>
+              </div>
+            </div>
+          </td>
+          <td>${ratingCell}</td>
+          <td>${count}</td>
+          <td>${badge}</td>
+          <td>${caution}</td>
+        </tr>`;
+    }
+
+    async function loadRatings() {
+      const orgBody = document.getElementById('ratingsOrgTableBody');
+      const wkBody = document.getElementById('ratingsWorkerTableBody');
+      orgBody.innerHTML = '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+      wkBody.innerHTML = '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+
+      const res = await api('/ratings/admin/summaries?limit=500');
+      if (!res || !res.success) {
+        orgBody.innerHTML = `<tr><td colspan="5" class="empty-state">Failed to load: ${escapeHtml(res && res.error) || 'unknown error'}</td></tr>`;
+        wkBody.innerHTML = '<tr><td colspan="5" class="empty-state">—</td></tr>';
+        return;
+      }
+
+      ratingSummaries = res.data || [];
+      ratingSummaryMap = {};
+      ratingSummaries.forEach(s => { ratingSummaryMap[s.user_id] = s; });
+
+      const orgs = ratingSummaries.filter(s => s.role === 'organizer');
+      const workers = ratingSummaries.filter(s => s.role === 'worker');
+
+      orgBody.innerHTML = orgs.length
+        ? orgs.map(renderRatingRow).join('')
+        : '<tr><td colspan="5" class="empty-state">No rated organizers yet</td></tr>';
+      wkBody.innerHTML = workers.length
+        ? workers.map(renderRatingRow).join('')
+        : '<tr><td colspan="5" class="empty-state">No rated workers yet</td></tr>';
+
+      const avgOf = (arr) => {
+        const rated = arr.filter(s => Number(s.ratings_count || 0) >= 3 && Number(s.avg_stars || 0) > 0);
+        if (!rated.length) return '—';
+        return (rated.reduce((sum, s) => sum + Number(s.avg_stars || 0), 0) / rated.length).toFixed(2);
+      };
+      const ratedCount = ratingSummaries.filter(s => Number(s.ratings_count || 0) > 0).length;
+      document.getElementById('ratedUsersCount').textContent = ratedCount;
+      document.getElementById('avgOrganizerStars').textContent = avgOf(orgs);
+      document.getElementById('avgWorkerStars').textContent = avgOf(workers);
+      document.getElementById('cautionUsersCount').textContent = ratingSummaries.filter(s => Number(s.active_severe_flags || 0) > 0).length;
+      document.getElementById('ratedUsersBadge').textContent = ratedCount;
+    }
+
+    // Drill-down: a single user's published reviews (stars + comments).
+    async function openUserRatings(userId) {
+      const s = ratingSummaryMap[userId];
+      const name = s ? s.name : 'User';
+      const summaryLine = s
+        ? `★ ${Number(s.avg_stars || 0).toFixed(1)} · ${Number(s.ratings_count || 0)} ratings · ${escapeHtml(s.badge_tier || 'NEW')}`
+        : '';
+      document.getElementById('modalTitle').textContent = 'Ratings & Reviews';
+      document.getElementById('modalContent').innerHTML = `
+        ${photoHeader(s && s.avatar_url, name, summaryLine)}
+        <div id="userRatingsList" style="color:#999;font-size:13px">Loading reviews…</div>
+      `;
+      document.getElementById('detailModal').classList.add('active');
+
+      const res = await api(`/ratings/user/${userId}?limit=50`);
+      const listEl = document.getElementById('userRatingsList');
+      if (!listEl) return; // modal closed before response
+      const rows = (res && res.data) || [];
+      if (!res || !res.data) { listEl.innerHTML = '<div style="color:#d63031">Failed to load reviews</div>'; return; }
+      if (!rows.length) { listEl.innerHTML = '<div>No published reviews yet.</div>'; return; }
+      listEl.innerHTML = rows.map(r => {
+        const n = Math.max(0, Math.min(5, Number(r.stars || 0)));
+        const stars = '★'.repeat(n) + '☆'.repeat(5 - n);
+        const by = r.raterRole === 'ORGANIZER' ? 'From organizer'
+          : (r.raterRole === 'CREW' ? 'From crew' : 'From user');
+        const comment = r.comment ? `<div style="margin-top:4px;color:#444;font-size:13px">“${escapeHtml(r.comment)}”</div>` : '';
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid #f0f0f0">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="color:#FBBF24;font-size:15px;letter-spacing:1px">${stars}</span>
+              <span style="color:#999;font-size:12px">${formatDate(r.publishedAt)}</span>
+            </div>
+            <div style="margin-top:2px;color:#666;font-size:12px">${by}${r.eventTitle ? ' · ' + escapeHtml(r.eventTitle) : ''}</div>
+            ${comment}
+          </div>`;
+      }).join('');
+    }
+
+    // Init — fetch everything in parallel.
     loadStats();
     loadWorkers();
     loadOrganizers();
+    loadEvents();
+    loadWithdrawals();
+    loadMissingCredits();
+    loadOrgPayments();
+    loadFlags();
+    loadRatings();
   </script>
 </body>
 </html>

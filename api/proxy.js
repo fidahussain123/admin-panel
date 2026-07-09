@@ -1,21 +1,20 @@
-import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
+// Vercel serverless proxy.
+// Browser → https://<vercel>.vercel.app/api/admin/...
+//        → AWS http://13.126.136.144:3001/api/admin/... (server-to-server, no mixed content)
+//
+// Config from the environment (Vercel project env vars). REMOTE_API_URL has a
+// non-secret default; the admin credentials must come from the environment.
+const REMOTE_API_URL = process.env.REMOTE_API_URL || 'http://13.126.136.144:3001/api';
+const ADMIN_PHONE = process.env.ADMIN_PHONE || '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Same logic as api/[...path].js — lets `npm start` work locally
-// without needing the Vercel CLI.
-const REMOTE_API_URL = 'http://13.126.136.144:3001/api';
-const ADMIN_PHONE = '+919876543210';
-const ADMIN_PASSWORD = 'krewsup@1234';
-
+// Token cache survives across warm invocations on the same Lambda instance.
 let cachedToken = null;
 let tokenPromise = null;
 
 async function fetchAdminToken() {
   if (tokenPromise) return tokenPromise;
+
   tokenPromise = (async () => {
     const r = await fetch(`${REMOTE_API_URL}/admin/login`, {
       method: 'POST',
@@ -29,6 +28,7 @@ async function fetchAdminToken() {
     cachedToken = body.data.token;
     return cachedToken;
   })().finally(() => { tokenPromise = null; });
+
   return tokenPromise;
 }
 
@@ -36,47 +36,39 @@ async function getToken() {
   return cachedToken || fetchAdminToken();
 }
 
-async function proxy(req, res) {
-  const queryIdx = req.originalUrl.indexOf('?');
-  const qs = queryIdx >= 0 ? req.originalUrl.slice(queryIdx) : '';
-  const remotePath = req.path.replace(/^\/api/, '') || '/';
-  const remoteUrl = `${REMOTE_API_URL}${remotePath}${qs}`;
+export default async function handler(req, res) {
+  // Strip the leading `/api` — what's left is the path on the AWS backend.
+  const remotePath = req.url.replace(/^\/api/, '') || '/';
+  const remoteUrl = `${REMOTE_API_URL}${remotePath}`;
   const hasBody = req.method !== 'GET' && req.method !== 'HEAD' && req.body && Object.keys(req.body).length > 0;
 
   const doFetch = (token) => fetch(remoteUrl, {
     method: req.method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: hasBody ? JSON.stringify(req.body) : undefined,
   });
 
   try {
     let token = await getToken();
     let upstream = await doFetch(token);
+
+    // Token expired — refresh once and retry.
     if (upstream.status === 401) {
       cachedToken = null;
       token = await fetchAdminToken();
       upstream = await doFetch(token);
     }
+
     const text = await upstream.text();
     res.status(upstream.status);
     const ct = upstream.headers.get('content-type');
-    if (ct) res.set('content-type', ct);
+    if (ct) res.setHeader('content-type', ct);
     res.send(text);
   } catch (err) {
-    console.error('[proxy]', err.message);
+    console.error('[proxy] error:', err.message);
     res.status(502).json({ success: false, error: 'Upstream API error: ' + err.message });
   }
 }
-
-const app = express();
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
-app.all('/api/*', proxy);
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../public/index.html')));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`KrewsUp Admin Panel on http://localhost:${PORT}`);
-  console.log(`Proxying /api/* → ${REMOTE_API_URL}/*`);
-});
