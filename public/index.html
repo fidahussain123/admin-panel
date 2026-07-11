@@ -577,6 +577,10 @@
           Events
           <span class="tab-badge" id="totalEventsBadge">0</span>
         </button>
+        <button class="tab" onclick="switchTab('deposits')">
+          ₹99 Deposits
+          <span class="tab-badge" id="depositsBadge">0</span>
+        </button>
         <button class="tab" onclick="switchTab('withdrawals')">
           Withdrawals
           <span class="tab-badge" id="pendingWithdrawalsBadge">0</span>
@@ -720,6 +724,51 @@
         </div>
 
         <div class="pagination" id="eventsPagination"></div>
+      </div>
+
+      <!-- ₹99 Deposits Section -->
+      <div class="section" id="depositsSection">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Total Deposits</h3>
+            <div class="value" id="totalDeposits">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Currently Held</h3>
+            <div class="value pending" id="heldDeposits">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Total Collected</h3>
+            <div class="value" id="depositsAmount">₹0</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="loadDeposits(1)">Refresh</button>
+          <select id="depositStatusFilter" onchange="loadDeposits(1)" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px">
+            <option value="">All</option>
+            <option value="paid">Paid (held)</option>
+            <option value="refunded">Refunded</option>
+          </select>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Worker</th>
+                <th>Event</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Paid</th>
+              </tr>
+            </thead>
+            <tbody id="depositsTableBody">
+              <tr><td colspan="5" class="loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="depositsPagination"></div>
       </div>
 
       <!-- Withdrawals Section -->
@@ -1442,6 +1491,55 @@
       `;
     }
 
+    // ─── ₹99 Deposits (durable ledger) ─────────────────────────────────
+    let currentDepositsPage = 1;
+    async function loadDeposits(page = 1) {
+      currentDepositsPage = page;
+      const status = document.getElementById('depositStatusFilter')?.value || '';
+      const qs = `page=${page}&limit=25` + (status ? `&status=${status}` : '');
+      const data = await api(`/admin/deposits?${qs}`);
+      const tbody = document.getElementById('depositsTableBody');
+      if (!data || !data.success) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load deposits</td></tr>';
+        return;
+      }
+      const rows = data.data || [];
+      const meta = data.meta || {};
+      const total = meta.total || rows.length;
+      document.getElementById('totalDeposits').textContent = total;
+      document.getElementById('depositsBadge').textContent = total;
+      document.getElementById('heldDeposits').textContent = rows.filter(d => d.status === 'paid').length;
+      document.getElementById('depositsAmount').textContent = '₹' + Number(meta.total_amount || 0).toLocaleString('en-IN');
+
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No deposits yet</td></tr>';
+        document.getElementById('depositsPagination').innerHTML = '';
+        return;
+      }
+      tbody.innerHTML = rows.map(d => {
+        const statusClass = d.status === 'refunded' ? 'verified' : 'pending';
+        const label = d.status === 'refunded' ? 'Refunded' : 'Paid (held)';
+        const evt = d.event_title ? escapeHtml(d.event_title) : '<span style="color:#999">(event deleted)</span>';
+        return `
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                ${avatarThumb(null, d.worker_name)}
+                <div>
+                  <div><strong>${escapeHtml(d.worker_name) || 'Unknown'}</strong></div>
+                  <div style="color:#999;font-size:12px">${escapeHtml(d.worker_phone) || ''}</div>
+                </div>
+              </div>
+            </td>
+            <td>${evt}</td>
+            <td><strong>₹${Number(d.amount || 0).toLocaleString('en-IN')}</strong></td>
+            <td><span class="status-badge status-${statusClass}">${label}</span></td>
+            <td style="font-size:12px;color:#666">${formatDate(d.paid_at)}</td>
+          </tr>`;
+      }).join('');
+      renderPagination('depositsPagination', meta, (p) => loadDeposits(p));
+    }
+
     // ─── Withdrawal Requests ─────────────────────────────────
     let currentWithdrawalsPage = 1;
     let lastWithdrawals = [];
@@ -2104,6 +2202,7 @@
     loadWorkers();
     loadOrganizers();
     loadEvents();
+    loadDeposits();
     loadWithdrawals();
     loadMissingCredits();
     loadOrgPayments();
