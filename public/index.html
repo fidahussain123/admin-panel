@@ -601,6 +601,10 @@
           Ratings
           <span class="tab-badge" id="ratedUsersBadge">0</span>
         </button>
+        <button class="tab" onclick="switchTab('suppliers'); loadSuppliers();">
+          Suppliers
+          <span class="tab-badge" id="pendingSuppliersBadge">0</span>
+        </button>
       </div>
 
       <!-- Gig Workers Section -->
@@ -682,6 +686,53 @@
         </div>
 
         <div class="pagination" id="organizersPagination"></div>
+      </div>
+
+      <!-- Crew Suppliers Section -->
+      <div class="section" id="suppliersSection">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Total Suppliers</h3>
+            <div class="value" id="totalSuppliers">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Pending</h3>
+            <div class="value pending" id="pendingSuppliers">0</div>
+          </div>
+          <div class="stat-card">
+            <h3>Verified</h3>
+            <div class="value verified" id="verifiedSuppliers">0</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" onclick="loadSuppliers()">Refresh</button>
+          <select id="supplierStatusFilter" onchange="loadSuppliers()" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px">
+            <option value="">All</option>
+            <option value="pending">Pending</option>
+            <option value="verified">Verified</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Business</th>
+                <th>Contact</th>
+                <th>City</th>
+                <th>Status</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="suppliersTableBody">
+              <tr><td colspan="7" class="loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Events Section -->
@@ -1120,12 +1171,15 @@
         return;
       }
 
-      if (!data.data || data.data.length === 0) {
+      // Hide incomplete registrations: phone-only sign-ups that picked (or defaulted
+      // to) a role but never onboarded and have no name — they render as blank "N/A"
+      // rows. The backend also filters these; this keeps the panel clean regardless.
+      lastWorkers = (data.data || []).filter(w => w.is_onboarded || (w.name && String(w.name).trim()));
+
+      if (lastWorkers.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No gig workers found</td></tr>';
         return;
       }
-
-      lastWorkers = data.data;
 
       tbody.innerHTML = lastWorkers.map(w => {
         const loc = [w.city, w.country].filter(Boolean).join(', ') || '-';
@@ -1204,7 +1258,9 @@
         return;
       }
 
-      lastOrganizers = data.data || [];
+      // Hide incomplete registrations: picked "organizer" but never onboarded and
+      // have no name/company — they render as blank "N/A" rows. Backend also filters.
+      lastOrganizers = (data.data || []).filter(o => o.is_onboarded || (o.name && String(o.name).trim()) || o.company_name);
       lastOrganizersTotal = data.meta?.total || lastOrganizers.length;
       refreshOrganizerStats();
 
@@ -1263,6 +1319,60 @@
     function rejectOrganizer(id) {
       const o = lastOrganizers.find(x => x.id === id);
       openRejectModal({ type: 'organizer', id, label: o?.company_name || o?.name });
+    }
+
+    // ─── Crew Suppliers ──────────────────────────────────────
+    let lastSuppliers = [];
+    async function loadSuppliers() {
+      const status = document.getElementById('supplierStatusFilter')?.value || '';
+      const tbody = document.getElementById('suppliersTableBody');
+      tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading...</td></tr>';
+      const data = await api('/admin/suppliers' + (status ? `?status=${status}` : ''));
+      if (!data.success) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Failed to load: ${escapeHtml(data.error) || 'unknown'}</td></tr>`;
+        return;
+      }
+      lastSuppliers = data.data || [];
+      const verified = lastSuppliers.filter(s => s.status === 'verified').length;
+      const pending = lastSuppliers.filter(s => s.status === 'pending').length;
+      document.getElementById('totalSuppliers').textContent = lastSuppliers.length;
+      document.getElementById('verifiedSuppliers').textContent = verified;
+      document.getElementById('pendingSuppliers').textContent = pending;
+      document.getElementById('pendingSuppliersBadge').textContent = pending;
+
+      if (!lastSuppliers.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No suppliers found</td></tr>';
+        return;
+      }
+      tbody.innerHTML = lastSuppliers.map(s => {
+        const color = s.status === 'verified' ? '#16a34a' : s.status === 'rejected' ? '#dc2626' : '#d97706';
+        const joined = s.joined_at ? new Date(s.joined_at).toLocaleDateString('en-IN') : '-';
+        return `
+        <tr>
+          <td><strong>${escapeHtml(s.name) || 'N/A'}</strong></td>
+          <td>${escapeHtml(s.business_name) || '<span style="color:#bbb">—</span>'}</td>
+          <td><div>${escapeHtml(s.email) || '-'}</div><div style="color:#999;font-size:12px">${escapeHtml(s.phone) || '-'}</div></td>
+          <td>${escapeHtml(s.city) || '-'}</td>
+          <td><span style="color:${color};font-weight:600;text-transform:capitalize">${escapeHtml(s.status)}</span>${s.status === 'rejected' && s.rejection_reason ? `<div style="color:#999;font-size:11px">${escapeHtml(s.rejection_reason)}</div>` : ''}</td>
+          <td>${joined}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-success btn-sm" onclick="verifySupplier('${s.user_id}')" ${s.status === 'verified' ? 'disabled' : ''}>Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectSupplier('${s.user_id}')">Reject</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function verifySupplier(userId) {
+      if (!confirm('Approve this supplier? Their account goes live.')) return;
+      const data = await api(`/admin/suppliers/${userId}/verify`, { method: 'POST' });
+      if (data.success) loadSuppliers();
+      else alert('Failed: ' + (data.error || 'unknown'));
+    }
+
+    function rejectSupplier(userId) {
+      const s = lastSuppliers.find(x => x.user_id === userId);
+      openRejectModal({ type: 'supplier', id: userId, label: s?.name || s?.business_name });
     }
 
     // ─── Detail helpers ──────────────────────────────────────
@@ -1693,10 +1803,12 @@
     function openRejectModal({ type, id, label }) {
       pendingReject = { type, id, label };
       document.getElementById('rejectModalTitle').textContent =
-        type === 'withdrawal' ? 'Reject Withdrawal' : 'Reject Organizer';
+        type === 'withdrawal' ? 'Reject Withdrawal' : type === 'supplier' ? 'Reject Supplier' : 'Reject Organizer';
       document.getElementById('rejectModalSubtitle').textContent =
         type === 'withdrawal'
           ? `${label || 'Worker'} will be notified and the reserved wallet balance will be refunded automatically.`
+          : type === 'supplier'
+          ? `${label || 'Supplier'} will be notified and can edit their details and resubmit.`
           : `${label || 'Organizer'} will need to re-register after rejection.`;
 
       // Reset state.
@@ -1733,6 +1845,8 @@
       const { type, id } = pendingReject;
       const endpoint = type === 'withdrawal'
         ? `/admin/withdrawal-requests/${id}/reject`
+        : type === 'supplier'
+        ? `/admin/suppliers/${id}/reject`
         : `/admin/companies/${id}/reject`;
       const body = type === 'withdrawal'
         ? { adminNotes }
@@ -1746,6 +1860,7 @@
 
       closeRejectModal();
       if (type === 'withdrawal') loadWithdrawals(currentWithdrawalsPage);
+      else if (type === 'supplier') loadSuppliers();
       else loadOrganizers(currentOrganizersPage);
     }
 
