@@ -605,6 +605,10 @@
           Suppliers
           <span class="tab-badge" id="pendingSuppliersBadge">0</span>
         </button>
+        <button class="tab" onclick="switchTab('supplierapps'); loadSupplierApps();">
+          Who Applied
+          <span class="tab-badge" id="pendingSupplierAppsBadge">0</span>
+        </button>
       </div>
 
       <!-- Gig Workers Section -->
@@ -730,6 +734,40 @@
             </thead>
             <tbody id="suppliersTableBody">
               <tr><td colspan="7" class="loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Crew Supplier Applications -->
+      <div class="section" id="supplierappsSection">
+        <div class="stats-grid">
+          <div class="stat-card"><h3>Total Applications</h3><div class="value" id="totalSupplierApps">0</div></div>
+          <div class="stat-card"><h3>Pending</h3><div class="value pending" id="pendingSupplierApps">0</div></div>
+          <div class="stat-card"><h3>Accepted</h3><div class="value verified" id="acceptedSupplierApps">0</div></div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" onclick="loadSupplierApps()">Refresh</button>
+          <select id="supplierAppStatusFilter" onchange="loadSupplierApps()" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px">
+            <option value="">All</option>
+            <option value="pending">Pending</option>
+            <option value="accepted">Accepted</option>
+            <option value="rejected">Rejected</option>
+            <option value="withdrawn">Withdrawn</option>
+          </select>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Supplier</th><th>Event</th><th>Organizer</th>
+                <th>Crew offered</th><th>Status</th><th>Applied</th>
+              </tr>
+            </thead>
+            <tbody id="supplierAppsTableBody">
+              <tr><td colspan="6" class="loading">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1361,6 +1399,75 @@
           </td>
         </tr>`;
       }).join('');
+    }
+
+    // ─── Crew Supplier Applications (who applied) ────────────
+    let lastSupplierApps = [];
+    async function loadSupplierApps() {
+      const status = document.getElementById('supplierAppStatusFilter')?.value || '';
+      const tbody = document.getElementById('supplierAppsTableBody');
+      tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+      const data = await api('/admin/supplier-applications' + (status ? `?status=${status}` : ''));
+      if (!data.success) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Failed to load: ${escapeHtml(data.error) || 'unknown'}</td></tr>`;
+        return;
+      }
+      lastSupplierApps = data.data || [];
+      const pending = lastSupplierApps.filter(a => a.status === 'pending').length;
+      const accepted = lastSupplierApps.filter(a => a.status === 'accepted').length;
+      document.getElementById('totalSupplierApps').textContent = lastSupplierApps.length;
+      document.getElementById('pendingSupplierApps').textContent = pending;
+      document.getElementById('acceptedSupplierApps').textContent = accepted;
+      document.getElementById('pendingSupplierAppsBadge').textContent = pending;
+
+      if (!lastSupplierApps.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No supplier applications yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = lastSupplierApps.map(a => {
+        const color = a.status === 'accepted' ? '#16a34a'
+                    : a.status === 'rejected' ? '#dc2626'
+                    : a.status === 'withdrawn' ? '#64748b' : '#d97706';
+        const when = a.created_at ? new Date(a.created_at).toLocaleDateString('en-IN') : '-';
+        const crew = (a.crew || []).map(c =>
+          `<button onclick="viewWorker('${c.id}')"
+             style="background:#f4f6fb;border:1px solid #e5e7eb;border-radius:999px;padding:3px 9px;margin:2px 3px 2px 0;font-size:11px;cursor:pointer">
+             ${escapeHtml(c.name) || 'Worker'}</button>`).join('') || '<span style="color:#bbb">—</span>';
+        return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(a.supplier_name) || 'N/A'}</strong>
+            <div style="color:#999;font-size:12px">${escapeHtml(a.supplier_phone) || ''}${a.supplier_city ? ' · ' + escapeHtml(a.supplier_city) : ''}</div>
+          </td>
+          <td>
+            <div><strong>${escapeHtml(a.event_title) || '-'}</strong></div>
+            <div style="color:#999;font-size:12px">${escapeHtml(a.event_location) || ''}</div>
+          </td>
+          <td>${escapeHtml(a.organizer_name) || '-'}</td>
+          <td><div style="max-width:280px">${crew}</div></td>
+          <td><span style="color:${color};font-weight:600;text-transform:capitalize">${escapeHtml(a.status)}</span>
+            ${a.reject_reason ? `<div style="color:#999;font-size:11px">${escapeHtml(a.reject_reason)}</div>` : ''}</td>
+          <td>${when}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    /** Worker profile popup, opened from any crew chip. */
+    async function viewWorker(id) {
+      const data = await api(`/admin/workers/${id}/profile`);
+      if (!data.success) { alert('Failed: ' + (data.error || 'unknown')); return; }
+      const w = data.data;
+      const crews = (w.crews || []).map(c => `${escapeHtml(c.supplier_name)} (${c.status})`).join(', ') || 'None';
+      alert(
+        `${w.name || 'Worker'}\n` +
+        `${w.phone || '-'}  ${w.email || ''}\n\n` +
+        `Gender: ${w.gender || '-'}   Age: ${w.age || '-'}   Exp: ${w.experience || '-'}\n` +
+        `Skills: ${w.skills || '-'}\n` +
+        `Verification: ${w.verification_status || 'none'}\n` +
+        `Rating: ${w.avg_stars || 0}★ (${w.ratings_count || 0})\n\n` +
+        `Applications: ${w.total_applications || 0}   Accepted: ${w.accepted_count || 0}\n` +
+        `Crews: ${crews}`
+      );
     }
 
     async function verifySupplier(userId) {
