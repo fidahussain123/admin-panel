@@ -1671,40 +1671,132 @@
     }
 
     // Click an event → list its accepted crew with each worker's ₹99 status.
+    /**
+     * All-in-one event drill-down. Pulls every application on the event (no
+     * status filter) plus any crew-supplier proposals, groups them by status,
+     * and lets the admin tap any worker or supplier to open their profile.
+     */
     async function openEventCrew(eventId) {
       const ev = lastEvents.find(x => x.id === eventId);
-      document.getElementById('modalTitle').textContent = (ev?.title || 'Event') + ' — Accepted crew';
-      document.getElementById('modalContent').innerHTML = '<div class="loading">Loading crew…</div>';
+      document.getElementById('modalTitle').textContent = (ev?.title || 'Event') + ' — Applications';
+      document.getElementById('modalContent').innerHTML = '<div class="loading">Loading applications…</div>';
       document.getElementById('detailModal').classList.add('active');
 
-      const data = await api(`/admin/applications/all?event_id=${eventId}&status=accepted&limit=100`);
-      const rows = (data && data.data) || [];
-      if (rows.length === 0) {
-        document.getElementById('modalContent').innerHTML = '<div class="empty-state">No accepted crew yet.</div>';
-        return;
-      }
-      const isPaid = (a) => a.deposit_status === 'paid' || a.deposit_status === 'refunded';
-      const body = rows.map(a => {
+      const [appsRes, supRes] = await Promise.all([
+        api(`/admin/applications/all?event_id=${eventId}&limit=200`),
+        api(`/admin/supplier-applications?limit=200`),
+      ]);
+      const apps = (appsRes && appsRes.data) || [];
+      const supplierProps = ((supRes && supRes.data) || []).filter(x => x.event_id === eventId);
+
+      // Group by status. Same colour language as elsewhere in the panel.
+      const buckets = {
+        pending:   { label: 'Pending review', color: '#d97706', rows: [] },
+        accepted:  { label: 'Accepted',       color: '#16a34a', rows: [] },
+        waitlist:  { label: 'Waitlist',       color: '#2563eb', rows: [] },
+        rejected:  { label: 'Rejected',       color: '#dc2626', rows: [] },
+        withdrawn: { label: 'Withdrawn',      color: '#64748b', rows: [] },
+      };
+      apps.forEach(a => {
+        const b = buckets[a.application_status] || buckets.pending;
+        b.rows.push(a);
+      });
+
+      const depositBadge = (a) => {
         const ds = a.deposit_status || 'none';
-        const badge = ds === 'paid' ? '<span class="status-badge status-verified">Paid ₹99</span>'
-          : ds === 'refunded' ? '<span class="status-badge status-verified">Paid · refunded</span>'
-          : ds === 'pending' ? '<span class="status-badge status-pending">Deposit pending</span>'
-          : ds === 'expired' ? '<span class="status-badge status-rejected">Expired</span>'
-          : '<span class="status-badge status-pending">—</span>';
+        if (ds === 'paid')     return '<span class="status-badge status-verified">Paid ₹99</span>';
+        if (ds === 'refunded') return '<span class="status-badge status-verified">Refunded</span>';
+        if (ds === 'pending')  return '<span class="status-badge status-pending">Deposit pending</span>';
+        if (ds === 'expired')  return '<span class="status-badge status-rejected">Expired</span>';
+        return '';
+      };
+
+      const appliedAgo = (iso) => {
+        if (!iso) return '';
+        const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+        if (days <= 0) return 'today';
+        if (days === 1) return 'yesterday';
+        if (days < 30) return days + 'd ago';
+        return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      };
+
+      const workerRow = (a) => {
+        const meta = [a.worker_gender, a.worker_age ? a.worker_age + 'y' : null,
+                      a.experience_years ? a.experience_years + 'y exp' : null].filter(Boolean).join(' · ');
+        const src = a.source === 'supplier' ? '<span class="status-badge" style="background:#f0efFc;color:#5b4bc4">via supplier</span>' : '';
         return `
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #f0f0f0">
+          <div onclick="viewWorker('${a.worker_id}')"
+               style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-top:1px solid #f0f0f0;cursor:pointer;border-radius:8px"
+               onmouseover="this.style.background='#faf9ff'" onmouseout="this.style.background='transparent'">
             ${avatarThumb(a.worker_avatar, a.worker_name)}
             <div style="flex:1;min-width:0">
-              <div><strong>${escapeHtml(a.worker_name) || 'Unknown'}</strong></div>
-              <div style="color:#999;font-size:12px">${escapeHtml(a.worker_phone) || ''}</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <strong>${escapeHtml(a.worker_name) || 'Unknown'}</strong>
+                ${src}
+              </div>
+              <div style="color:#999;font-size:12px">
+                ${escapeHtml(a.worker_phone) || ''}${meta ? ' · ' + escapeHtml(meta) : ''}
+                ${a.applied_at ? ' · applied ' + appliedAgo(a.applied_at) : ''}
+              </div>
             </div>
-            ${badge}
+            ${depositBadge(a)}
+            <span style="color:#c3c8db;font-size:14px;margin-left:4px">›</span>
           </div>`;
-      }).join('');
-      const paid = rows.filter(isPaid).length;
+      };
+
+      const sections = Object.entries(buckets)
+        .filter(([, b]) => b.rows.length > 0)
+        .map(([, b]) => `
+          <div style="margin-top:16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="width:8px;height:8px;border-radius:4px;background:${b.color};display:inline-block"></span>
+              <div style="font-weight:700;color:#111827;font-size:13px">${b.label}</div>
+              <div style="color:#999;font-size:12px">· ${b.rows.length}</div>
+            </div>
+            ${b.rows.map(workerRow).join('')}
+          </div>`).join('');
+
+      const supplierSection = supplierProps.length === 0 ? '' : `
+        <div style="margin-top:20px;padding-top:16px;border-top:2px solid #eceef4">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="width:8px;height:8px;border-radius:4px;background:#6d5dd3;display:inline-block"></span>
+            <div style="font-weight:700;color:#111827;font-size:13px">Crew supplier proposals</div>
+            <div style="color:#999;font-size:12px">· ${supplierProps.length}</div>
+          </div>
+          ${supplierProps.map(p => {
+            const color = p.status === 'accepted' ? '#16a34a' : p.status === 'rejected' ? '#dc2626' : '#d97706';
+            const chips = (p.crew || []).map(c =>
+              `<button onclick="viewWorker('${c.id}')"
+                 style="background:#f4f6fb;border:1px solid #e5e7eb;border-radius:999px;padding:3px 10px;margin:3px 4px 0 0;font-size:11px;cursor:pointer">
+                 ${escapeHtml(c.name) || 'Worker'} <span style="color:#b0b7c9">›</span></button>`).join('');
+            return `
+              <div style="border:1px solid #eceef4;border-radius:12px;padding:12px;margin-bottom:8px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  ${avatarThumb(p.supplier_avatar, p.supplier_name)}
+                  <div style="flex:1;min-width:0">
+                    <div><strong>${escapeHtml(p.supplier_name) || 'Supplier'}</strong>
+                      <span style="background:#f0efFc;color:#5b4bc4;font-weight:700;font-size:10px;padding:2px 7px;border-radius:999px;margin-left:6px">SUPPLIER</span>
+                    </div>
+                    <div style="color:#999;font-size:12px">
+                      Offering ${p.worker_count} crew${p.supplier_city ? ' · ' + escapeHtml(p.supplier_city) : ''}
+                    </div>
+                  </div>
+                  <span style="color:${color};font-weight:600;text-transform:capitalize;font-size:12px">${escapeHtml(p.status)}</span>
+                </div>
+                ${chips ? `<div style="margin-top:8px">${chips}</div>` : ''}
+                ${p.note ? `<div style="color:#666;font-size:12px;margin-top:6px;font-style:italic">"${escapeHtml(p.note)}"</div>` : ''}
+              </div>`;
+          }).join('')}
+        </div>`;
+
+      const totals = `${apps.length} application${apps.length === 1 ? '' : 's'}`
+        + (supplierProps.length ? ` · ${supplierProps.length} supplier proposal${supplierProps.length === 1 ? '' : 's'}` : '');
+
       document.getElementById('modalContent').innerHTML = `
-        <div style="margin-bottom:8px;color:#666;font-size:13px">${paid} of ${rows.length} accepted crew have paid the ₹99 deposit.</div>
-        ${body}
+        <div style="color:#666;font-size:13px;margin-bottom:4px">${totals} · tap any name to open their profile</div>
+        ${apps.length === 0 && supplierProps.length === 0
+          ? '<div class="empty-state" style="margin-top:20px">No applications yet.</div>'
+          : sections + supplierSection}
       `;
     }
 
